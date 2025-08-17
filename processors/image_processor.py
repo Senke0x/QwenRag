@@ -5,12 +5,11 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from openai import OpenAI
-import requests
 
 from schemas.data_models import ImageMetadata, ProcessingStatus
 from config import QwenVLConfig, RetryConfig
-from utils.retry_utils import retry_with_backoff, RetryableError, NonRetryableError
+from clients.qwen_client import QwenClient
+from clients.prompt_manager import PromptManager, PromptType
 from utils.image_utils import (
     validate_image_file, image_to_base64, crop_face_from_image,
     extract_image_timestamp, generate_image_id, get_image_info
@@ -19,24 +18,6 @@ from utils.image_utils import (
 logger = logging.getLogger(__name__)
 
 
-class QwenVLError(Exception):
-    """Qwen VL API相关错误的基类"""
-    pass
-
-
-class QwenVLAuthError(NonRetryableError):
-    """认证错误，不可重试"""
-    pass
-
-
-class QwenVLRateLimitError(RetryableError):
-    """限流错误，可重试"""
-    pass
-
-
-class QwenVLServiceError(RetryableError):
-    """服务错误，可重试"""
-    pass
 
 
 class ImageProcessor:
@@ -44,119 +25,44 @@ class ImageProcessor:
     
     def __init__(
         self,
-        qwen_config: Optional[QwenVLConfig] = None,
-        retry_config: Optional[RetryConfig] = None
+        qwen_client: Optional[QwenClient] = None,
+        prompt_manager: Optional[PromptManager] = None
     ):
         """
         初始化图片处理器
         
         Args:
-            qwen_config: Qwen VL配置
-            retry_config: 重试配置
+            qwen_client: Qwen 客户端实例
+            prompt_manager: 提示词管理器实例
         """
         from config import config as default_config
         
-        self.qwen_config = qwen_config or default_config.qwen_vl
-        self.retry_config = retry_config or default_config.retry
+        self.qwen_client = qwen_client or QwenClient()
+        self.prompt_manager = prompt_manager or PromptManager()
         self.image_config = default_config.image_processor
         
-        # 验证API密钥
-        if not self.qwen_config.api_key:
-            raise ValueError("DASHSCOPE_API_KEY环境变量未设置或为空")
-        
-        # 初始化OpenAI客户端（兼容模式）
-        self.client = OpenAI(
-            api_key=self.qwen_config.api_key,
-            base_url=self.qwen_config.base_url
-        )
-        
-        logger.info(f"图片处理器初始化完成，模型: {self.qwen_config.model}")
+        logger.info("图片处理器初始化完成")
     
-    def _handle_api_error(self, error: Exception) -> Exception:
-        """
-        处理API错误，转换为对应的异常类型
-        
-        Args:
-            error: 原始异常
-            
-        Returns:
-            转换后的异常
-        """
-        if hasattr(error, 'response'):
-            status_code = getattr(error.response, 'status_code', 0)
-            
-            if status_code == 401:
-                return QwenVLAuthError(f"API认证失败: {error}")
-            elif status_code == 429:
-                return QwenVLRateLimitError(f"API限流: {error}")
-            elif status_code >= 500:
-                return QwenVLServiceError(f"服务错误: {error}")
-            elif 400 <= status_code < 500:
-                return NonRetryableError(f"客户端错误: {error}")
-        
-        # 网络相关错误
-        error_str = str(error).lower()
-        if any(keyword in error_str for keyword in ['timeout', 'connection', 'network']):
-            return RetryableError(f"网络错误: {error}")
-        
-        return QwenVLError(f"未知错误: {error}")
     
-    @retry_with_backoff()
-    def _call_qwen_vl_api(self, image_base64: str, prompt: str) -> Dict[str, Any]:
+    def _call_qwen_vl_api(self, image_base64: str, prompt_type: PromptType = PromptType.IMAGE_ANALYSIS) -> str:
         """
         调用Qwen VL API进行图片分析
         
         Args:
             image_base64: 图片的base64编码
-            prompt: 分析提示词
+            prompt_type: 提示词类型
             
         Returns:
             API响应结果
         """
-        try:
-            messages = [
-                {
-                    "role": "system",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "你是一个专业的图像分析助手。请仔细分析图片内容，并以JSON格式返回结果。"
-                        }
-                    ]
-                },
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            }
-                        },
-                        {
-                            "type": "text",
-                            "text": prompt
-                        }
-                    ]
-                }
-            ]
-            
-            response = self.client.chat.completions.create(
-                model=self.qwen_config.model,
-                messages=messages,
-                max_tokens=self.qwen_config.max_tokens,
-                temperature=self.qwen_config.temperature,
-                timeout=self.qwen_config.timeout
-            )
-            
-            content = response.choices[0].message.content
-            logger.debug(f"Qwen VL API响应: {content}")
-            
-            return content
-            
-        except Exception as e:
-            logger.error(f"Qwen VL API调用失败: {e}")
-            raise self._handle_api_error(e)
+        system_prompt = self.prompt_manager.get_system_prompt(prompt_type)
+        user_prompt = self.prompt_manager.get_user_prompt(prompt_type)
+        
+        return self.qwen_client.chat_with_image(
+            image_base64=image_base64,
+            user_prompt=user_prompt,
+            system_prompt=system_prompt
+        )
     
     def _parse_analysis_result(self, content: str) -> Dict[str, Any]:
         """
@@ -218,29 +124,8 @@ class ImageProcessor:
         # 转换为base64
         image_base64 = image_to_base64(image_path, max_size=(1024, 1024))
         
-        # 构造分析提示词
-        prompt = """
-请仔细分析这张图片，并以JSON格式返回以下信息：
-{
-    "is_snap": boolean,  // 是否是手机截图
-    "is_landscape": boolean,  // 是否是风景照
-    "description": "string",  // 详细的图片描述，用于语义检索
-    "has_person": boolean,  // 是否有人物
-    "face_rects": [[x,y,w,h], ...]  // 人脸位置框，格式为[x,y,width,height]的数组
-}
-
-注意：
-1. is_snap: 判断是否为手机应用界面截图、网页截图等
-2. is_landscape: 判断是否为自然风景、山水、城市景观等
-3. description: 提供详细的中文描述，包括主要内容、颜色、场景等
-4. has_person: 判断图片中是否包含人物（包括部分身体）
-5. face_rects: 如果有人脸，提供人脸的边界框坐标
-
-请只返回JSON格式的结果，不要包含其他文字。
-"""
-        
         # 调用API
-        content = self._call_qwen_vl_api(image_base64, prompt)
+        content = self._call_qwen_vl_api(image_base64, PromptType.IMAGE_ANALYSIS)
         
         # 解析结果
         return self._parse_analysis_result(content)

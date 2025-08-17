@@ -17,6 +17,7 @@ sys.path.insert(0, str(project_root))
 
 from config import QwenVLConfig, ImageProcessorConfig
 from processors.image_processor import ImageProcessor
+from clients.qwen_client import QwenClient
 from vector_store.faiss_store import FaissStore
 from utils.logger import setup_logger
 from schemas.data_models import ProcessingStatus
@@ -75,8 +76,9 @@ def demo_image_processing(image_paths: list, use_real_api: bool = False):
             return []
         
         print("使用真实Qwen VL API...")
-        config = QwenVLConfig(api_key=api_key)
-        processor = ImageProcessor(qwen_config=config)
+        qwen_config = QwenVLConfig(api_key=api_key)
+        qwen_client = QwenClient(qwen_config=qwen_config)
+        processor = ImageProcessor(qwen_client=qwen_client)
         
         results = []
         for i, image_path in enumerate(image_paths):

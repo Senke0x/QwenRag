@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 
 from config import QwenVLConfig, ImageProcessorConfig
 from processors.image_processor import ImageProcessor
+from clients.qwen_client import QwenClient
 from vector_store.faiss_store import FaissStore
 from utils.logger import setup_logger
 from utils.image_utils import find_images_in_directory
@@ -159,7 +160,8 @@ def main():
         
         # 初始化处理器
         logger.info("初始化图片处理器...")
-        processor = ImageProcessor(qwen_config=qwen_config)
+        qwen_client = QwenClient(qwen_config=qwen_config)
+        processor = ImageProcessor(qwen_client=qwen_client)
         
         # 查找图片文件
         logger.info("扫描图片文件...")

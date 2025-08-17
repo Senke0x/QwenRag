@@ -175,10 +175,12 @@ def image_processor(api_key, use_real_api):
     if use_real_api and api_key:
         # 使用真实API
         from processors.image_processor import ImageProcessor
+        from clients.qwen_client import QwenClient
         from config import QwenVLConfig
         
         config = QwenVLConfig(api_key=api_key)
-        return ImageProcessor(qwen_config=config)
+        qwen_client = QwenClient(qwen_config=config)
+        return ImageProcessor(qwen_client=qwen_client)
     else:
         # 返回None，测试中使用mock
         return None
@@ -214,3 +216,55 @@ def sample_vectors():
 def sample_ids():
     """生成示例ID列表"""
     return [f"img_id_{i}" for i in range(10)]
+
+
+# 新的客户端相关 fixtures
+@pytest.fixture
+def qwen_client(api_key, use_real_api):
+    """创建QwenClient实例"""
+    if use_real_api and api_key:
+        from clients.qwen_client import QwenClient
+        from config import QwenVLConfig
+        
+        config = QwenVLConfig(api_key=api_key)
+        return QwenClient(qwen_config=config)
+    else:
+        # 返回None，测试中使用mock
+        return None
+
+
+@pytest.fixture
+def prompt_manager():
+    """创建PromptManager实例"""
+    from clients.prompt_manager import PromptManager
+    return PromptManager()
+
+
+@pytest.fixture
+def mock_qwen_client():
+    """创建模拟的QwenClient"""
+    from unittest.mock import Mock
+    mock_client = Mock()
+    mock_client.chat_with_image.return_value = '{"test": "mock_response"}'
+    mock_client.chat_with_text.return_value = "Mock text response"
+    mock_client.get_client_info.return_value = {
+        "model": "mock-model",
+        "base_url": "mock-url",
+        "max_tokens": 1024,
+        "temperature": 0.1,
+        "timeout": 60
+    }
+    return mock_client
+
+
+@pytest.fixture
+def test_config():
+    """创建测试用的配置"""
+    from config import QwenVLConfig
+    return QwenVLConfig(
+        api_key="test_api_key",
+        model="test-model",
+        temperature=0.5,
+        max_tokens=512,
+        timeout=30
+    )

@@ -25,9 +25,10 @@ sys.path.insert(0, str(project_root))
 
 from config import QwenVLConfig
 from processors.image_processor import ImageProcessor
+from clients.qwen_client import QwenClient
 from vector_store.faiss_store import FaissStore
 from utils.logger import setup_logger
-from schemas.data_models import ImageMetadata, SearchResult
+from schemas.data_models import ImageMetadata, SearchResult, ProcessingStatus
 
 
 def setup_logging(log_level: str = "INFO"):
@@ -318,7 +319,8 @@ def main():
             
             logger.info(f"执行图片搜索: '{args.image_query}'")
             qwen_config = QwenVLConfig(api_key=api_key)
-            processor = ImageProcessor(qwen_config=qwen_config)
+            qwen_client = QwenClient(qwen_config=qwen_config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             results = image_search(args.image_query, metadata_list, processor, args.top_k)
         

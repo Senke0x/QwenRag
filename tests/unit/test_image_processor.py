@@ -10,6 +10,7 @@ import requests
 
 from schemas.data_models import ImageMetadata, ProcessingStatus
 from processors.image_processor import ImageProcessor
+from clients.qwen_client import QwenClient
 from config import QwenVLConfig, ImageProcessorConfig
 from utils.image_utils import validate_image_file, is_supported_image_format
 
@@ -62,7 +63,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过模拟测试，当前使用真实API")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             # 模拟OpenAI客户端
             mock_client = Mock()
             mock_openai.return_value = mock_client
@@ -75,7 +76,8 @@ class TestImageProcessor:
             
             # 创建处理器并测试
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(sample_image_path)
             
@@ -87,7 +89,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过限流测试，避免触发真实API限流")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             # 模拟OpenAI客户端
             mock_client = Mock()
             mock_openai.return_value = mock_client
@@ -99,7 +101,8 @@ class TestImageProcessor:
             )
             
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             # 验证处理失败并记录错误
             result = processor.process_image(sample_image_path)
@@ -111,7 +114,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过超时测试，避免长时间等待")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
             
@@ -124,7 +127,8 @@ class TestImageProcessor:
             mock_client.chat.completions.create.side_effect = MockTimeoutError("Request timeout")
             
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(sample_image_path)
             assert result.processing_status == ProcessingStatus.FAILED
@@ -135,7 +139,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过认证失败测试，避免使用无效密钥")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
             
@@ -173,7 +177,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过模拟测试")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
             
@@ -183,7 +187,8 @@ class TestImageProcessor:
             mock_client.chat.completions.create.return_value = mock_response
             
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(sample_portrait_path)
             
@@ -200,7 +205,7 @@ class TestImageProcessor:
         # 模拟多人脸响应
         mock_response_content = '{"is_snap": false, "is_landscape": false, "description": "多人合影", "has_person": true, "face_rects": [[10, 10, 50, 50], [70, 20, 40, 40], [120, 30, 45, 45]]}'
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
             
@@ -210,7 +215,8 @@ class TestImageProcessor:
             mock_client.chat.completions.create.return_value = mock_response
             
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(sample_portrait_path)
             
@@ -235,7 +241,7 @@ class TestImageProcessor:
         if use_real_api:
             pytest.skip("跳过模拟测试")
         
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             mock_client = Mock()
             mock_openai.return_value = mock_client
             
@@ -245,7 +251,8 @@ class TestImageProcessor:
             mock_client.chat.completions.create.return_value = mock_response
             
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(sample_image_path)
             
@@ -293,9 +300,10 @@ class TestImageProcessor:
             f.write(b"not a valid image")
         
         # 使用mock避免实际API调用
-        with patch('processors.image_processor.OpenAI') as mock_openai:
+        with patch('clients.qwen_client.OpenAI') as mock_openai:
             config = QwenVLConfig(api_key="test_key")
-            processor = ImageProcessor(qwen_config=config)
+            qwen_client = QwenClient(qwen_config=config)
+            processor = ImageProcessor(qwen_client=qwen_client)
             
             result = processor.process_image(corrupted_path)
             
