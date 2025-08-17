@@ -209,5 +209,26 @@ __marimo__/
 # project gitignore
 dataset/
 
+# Project specific directories
+output/
+index/
+build/
+logs/
+
+# Configuration files (keep examples)
+config.yaml
+.env
+
+# Project logs and temporary files
+*.log
+qwen_rag.log
+
+# FAISS index files
+*.index
+*.metadata
+
+# Coverage reports
+coverage.json
+
 # Claude Code settings
 .claude/
