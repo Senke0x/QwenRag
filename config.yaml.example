@@ -1,0 +1,52 @@
+# QwenRag 配置文件示例
+
+# Qwen VL API 配置
+qwen_vl:
+  api_key: ""  # 你的API密钥，也可通过环境变量DASHSCOPE_API_KEY设置
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+  model: "qwen-vl-max-latest"
+  timeout: 60
+  max_tokens: 2048
+  temperature: 0.1
+
+# 重试配置
+retry:
+  max_retries: 3
+  base_delay: 1.0
+  max_delay: 60.0
+  exponential_base: 2
+  retryable_errors:
+    - "rate_limit_exceeded"
+    - "service_unavailable"
+    - "timeout"
+    - "connection_error"
+    - "internal_error"
+
+# 图片处理配置
+image_processor:
+  supported_formats:
+    - ".jpg"
+    - ".jpeg"
+    - ".png"
+    - ".webp"
+  max_image_size: 20971520  # 20MB
+  max_resolution: [4096, 4096]
+  resize_quality: 85
+
+# 路径配置
+paths:
+  input_dir: ""
+  output_dir: ""
+  index_dir: ""
+
+# 日志配置
+logging:
+  level: "INFO"
+  file: "qwen_rag.log"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
+
+# FAISS索引配置
+faiss:
+  dimension: 768
+  index_type: "IndexFlatL2"
+  batch_size: 1000
