@@ -42,8 +42,10 @@ def test_qwen_client():
             result = client.chat_with_text("测试消息")
             assert result == "测试响应"
             
-            # 测试图片聊天
-            result = client.chat_with_image("fake_base64", "分析图片")
+            # 测试图片聊天 - 使用真实图片数据
+            from tests.test_data import get_test_image_base64
+            real_image_base64 = get_test_image_base64()
+            result = client.chat_with_image(real_image_base64, "分析图片")
             assert result == "测试响应"
             
             print("  ✅ QwenClient 测试通过")

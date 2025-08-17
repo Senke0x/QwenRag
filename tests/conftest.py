@@ -1,6 +1,7 @@
 """
 pytest配置文件
 """
+import warnings
 import pytest
 import os
 import tempfile
@@ -11,8 +12,16 @@ from PIL import Image, ImageDraw
 import numpy as np
 from dotenv import load_dotenv
 
+# 过滤SWIG相关的warnings
+warnings.filterwarnings("ignore", message="builtin type SwigPyPacked has no __module__ attribute")
+warnings.filterwarnings("ignore", message="builtin type SwigPyObject has no __module__ attribute") 
+warnings.filterwarnings("ignore", message="builtin type swigvarlink has no __module__ attribute")
+
 # 加载环境变量
 load_dotenv()
+
+# 导入测试数据管理模块
+from tests.test_data import test_data
 
 
 @pytest.fixture(scope="session")
@@ -36,105 +45,27 @@ def temp_dir():
 
 
 @pytest.fixture
-def sample_image_path(temp_dir):
-    """创建示例图片文件"""
-    # 创建一个更真实的测试图片
-    img = Image.new('RGB', (300, 200), color='skyblue')
-    draw = ImageDraw.Draw(img)
-    
-    # 绘制简单的风景：天空、山、树
-    # 绘制山峰
-    draw.polygon([(50, 150), (150, 80), (250, 150)], fill='gray')
-    # 绘制树
-    draw.rectangle([100, 120, 110, 150], fill='brown')  # 树干
-    draw.ellipse([90, 100, 120, 130], fill='green')     # 树冠
-    
-    image_path = os.path.join(temp_dir, "test_landscape.jpg")
-    img.save(image_path, quality=90)
-    return image_path
+def sample_image_path():
+    """获取真实的示例图片路径"""
+    return test_data.get_sample_landscape_path()
 
 
 @pytest.fixture
-def sample_portrait_path(temp_dir):
-    """创建人物肖像测试图片"""
-    img = Image.new('RGB', (200, 300), color='lightgray')
-    draw = ImageDraw.Draw(img)
-    
-    # 绘制简单的人脸
-    # 脸部轮廓
-    draw.ellipse([50, 80, 150, 180], fill='peachpuff')
-    # 眼睛
-    draw.ellipse([70, 110, 85, 125], fill='white')
-    draw.ellipse([115, 110, 130, 125], fill='white')
-    draw.ellipse([75, 115, 80, 120], fill='black')
-    draw.ellipse([120, 115, 125, 120], fill='black')
-    # 鼻子
-    draw.ellipse([95, 130, 105, 140], fill='pink')
-    # 嘴巴
-    draw.arc([85, 145, 115, 160], 0, 180, fill='red', width=2)
-    
-    image_path = os.path.join(temp_dir, "test_portrait.jpg")
-    img.save(image_path, quality=90)
-    return image_path
+def sample_portrait_path():
+    """获取真实的人物图片路径"""
+    return test_data.get_sample_portrait_path()
 
 
 @pytest.fixture
-def sample_screenshot_path(temp_dir):
-    """创建手机截图测试图片"""
-    img = Image.new('RGB', (375, 667), color='white')  # iPhone尺寸
-    draw = ImageDraw.Draw(img)
-    
-    # 绘制状态栏
-    draw.rectangle([0, 0, 375, 40], fill='black')
-    draw.text([10, 15], "9:41", fill='white')
-    draw.text([320, 15], "100%", fill='white')
-    
-    # 绘制应用界面
-    draw.rectangle([20, 60, 355, 100], fill='blue')
-    draw.text([30, 75], "App Title", fill='white')
-    
-    # 绘制按钮
-    for i in range(3):
-        y = 120 + i * 60
-        draw.rectangle([50, y, 325, y + 40], fill='lightblue')
-        draw.text([60, y + 15], f"Button {i+1}", fill='black')
-    
-    image_path = os.path.join(temp_dir, "test_screenshot.png")
-    img.save(image_path)
-    return image_path
+def sample_screenshot_path():
+    """获取真实的界面截图路径"""
+    return test_data.get_sample_interface_path()
 
 
 @pytest.fixture
-def sample_images_dir(temp_dir, sample_image_path, sample_portrait_path, sample_screenshot_path):
-    """创建包含多个示例图片的目录"""
-    images_dir = os.path.join(temp_dir, "images")
-    os.makedirs(images_dir)
-    
-    # 复制测试图片到目录
-    created_paths = []
-    
-    # 复制风景照
-    landscape_path = os.path.join(images_dir, "landscape.jpg")
-    shutil.copy2(sample_image_path, landscape_path)
-    created_paths.append(landscape_path)
-    
-    # 复制人物照
-    portrait_path = os.path.join(images_dir, "portrait.jpg")
-    shutil.copy2(sample_portrait_path, portrait_path)
-    created_paths.append(portrait_path)
-    
-    # 复制截图
-    screenshot_path = os.path.join(images_dir, "screenshot.png")
-    shutil.copy2(sample_screenshot_path, screenshot_path)
-    created_paths.append(screenshot_path)
-    
-    # 创建损坏文件
-    corrupted_path = os.path.join(images_dir, "corrupted.txt")
-    with open(corrupted_path, 'w') as f:
-        f.write("not an image")
-    created_paths.append(corrupted_path)
-    
-    return images_dir, created_paths
+def sample_images_dir():
+    """获取多张真实测试图片路径"""
+    return test_data.get_multiple_images(count=3)
 
 
 @pytest.fixture

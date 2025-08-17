@@ -13,6 +13,7 @@ from clients.qwen_client import QwenClient
 from clients.prompt_manager import PromptManager, PromptType
 from processors.image_processor import ImageProcessor
 from config import QwenVLConfig
+from tests.test_data import get_test_image, get_test_image_base64, get_test_portrait
 
 
 class TestClientIntegration:
@@ -42,7 +43,7 @@ class TestClientIntegration:
             
             # 调用客户端
             result = qwen_client.chat_with_image(
-                image_base64="fake_base64_image",
+                image_base64=get_test_image_base64(),
                 user_prompt=user_prompt,
                 system_prompt=system_prompt
             )
@@ -90,13 +91,15 @@ class TestClientIntegration:
                 with patch('utils.image_utils.image_to_base64') as mock_base64:
                     with patch('utils.image_utils.get_image_info') as mock_info:
                         mock_validate.return_value = (True, None)
-                        mock_base64.return_value = "fake_base64"
+                        mock_base64.return_value = get_test_image_base64()
                         mock_info.return_value = {
                             'unique_id': 'test_id',
                             'timestamp': '2024-01-01T00:00:00'
                         }
                         
-                        result = processor.analyze_image("/fake/path/image.jpg")
+                        # 使用真实图片路径
+                        test_image_path = get_test_image()
+                        result = processor.analyze_image(test_image_path)
                         
                         assert result['is_snap'] == False
                         assert result['has_person'] == True
@@ -149,7 +152,7 @@ class TestClientIntegration:
                 
                 # 调用API
                 result = qwen_client.chat_with_image(
-                    image_base64="fake_image",
+                    image_base64=get_test_image_base64(),
                     user_prompt=prompt['user'],
                     system_prompt=prompt['system']
                 )
@@ -183,9 +186,11 @@ class TestClientIntegration:
             with patch('utils.image_utils.validate_image_file') as mock_validate:
                 with patch('utils.image_utils.image_to_base64') as mock_base64:
                     mock_validate.return_value = (True, None)
-                    mock_base64.return_value = "fake_base64"
+                    mock_base64.return_value = get_test_image_base64()
                     
-                    result = processor.process_image("/fake/path/image.jpg")
+                    # 使用真实图片路径
+                    test_image_path = get_test_image()
+                    result = processor.process_image(test_image_path)
                     
                     # 验证错误被正确处理
                     from schemas.data_models import ProcessingStatus
@@ -225,7 +230,7 @@ class TestClientIntegration:
             )
             
             result = qwen_client.chat_with_image(
-                image_base64="fake_image",
+                image_base64=get_test_image_base64(),
                 user_prompt=formatted_user,
                 system_prompt=formatted_system
             )
@@ -417,7 +422,7 @@ class TestClientIntegration:
                     for i in range(5):
                         prompt = shared_prompt_manager.get_prompt(PromptType.IMAGE_ANALYSIS)
                         result = shared_client.chat_with_image(
-                            image_base64=f"fake_image_{i}",
+                            image_base64=get_test_image_base64(),
                             user_prompt=prompt['user'],
                             system_prompt=prompt['system']
                         )

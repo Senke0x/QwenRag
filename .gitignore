@@ -208,3 +208,6 @@ __marimo__/
 
 # project gitignore
 dataset/
+
+# Claude Code settings
+.claude/

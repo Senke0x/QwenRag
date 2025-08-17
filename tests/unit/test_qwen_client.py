@@ -15,6 +15,7 @@ from clients.qwen_client import (
 )
 from config import QwenVLConfig, RetryConfig
 from utils.retry_utils import NonRetryableError, RetryableError
+from tests.test_data import get_test_image, get_test_image_base64
 
 
 class TestQwenClient:
@@ -195,8 +196,11 @@ class TestQwenClient:
             
             client = QwenClient(qwen_config=config)
             
+            # 使用真实图片的base64编码
+            real_image_base64 = get_test_image_base64()
+            
             result = client.chat_with_image(
-                image_base64="base64_encoded_image",
+                image_base64=real_image_base64,
                 user_prompt="描述这张图片",
                 system_prompt="你是图像分析助手"
             )
@@ -231,8 +235,11 @@ class TestQwenClient:
             
             client = QwenClient(qwen_config=config)
             
+            # 使用真实图片的base64编码
+            real_image_base64 = get_test_image_base64()
+            
             result = client.chat_with_image(
-                image_base64="base64_image",
+                image_base64=real_image_base64,
                 user_prompt="分析图片"
             )
             
@@ -258,8 +265,11 @@ class TestQwenClient:
             
             client = QwenClient(qwen_config=config)
             
+            # 使用真实图片的base64编码
+            real_image_base64 = get_test_image_base64()
+            
             result = client.chat_with_image(
-                image_base64="base64_image",
+                image_base64=real_image_base64,
                 user_prompt="分析图片",
                 temperature=0.8,
                 max_tokens=1024
@@ -346,9 +356,12 @@ class TestQwenClient:
             
             client = QwenClient(qwen_config=config)
             
+            # 使用真实图片的base64编码
+            real_image_base64 = get_test_image_base64()
+            
             with pytest.raises(QwenVLAuthError):
                 client.chat_with_image(
-                    image_base64="base64_image",
+                    image_base64=real_image_base64,
                     user_prompt="分析图片"
                 )
     
