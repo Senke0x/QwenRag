@@ -1,0 +1,141 @@
+{
+  "project_summary": {
+    "source_files": 14,
+    "test_files": 5,
+    "documentation_files": 4,
+    "total_files": 23
+  },
+  "code_statistics": {
+    "source_code": {
+      "total_lines": 2505,
+      "code_lines": 1684,
+      "comment_lines": 283,
+      "blank_lines": 538,
+      "files": 14
+    },
+    "test_code": {
+      "total_lines": 809,
+      "code_lines": 489,
+      "comment_lines": 140,
+      "blank_lines": 180,
+      "files": 5
+    },
+    "documentation": {
+      "total_lines": 759,
+      "files": 4
+    }
+  },
+  "quality_metrics": {
+    "test_coverage_percentage": 53.271028037383175,
+    "test_to_code_ratio": 0.29038004750593827,
+    "total_functions": 13,
+    "total_classes": 11,
+    "average_function_length": 31.625,
+    "files_with_high_complexity": []
+  },
+  "coverage_details": {
+    "coverage_percentage": 53.271028037383175,
+    "total_statements": 1605,
+    "covered_statements": 855,
+    "missing_lines": 750,
+    "files_coverage": {
+      "__init__.py": {
+        "coverage": 100.0,
+        "statements": 8,
+        "missing": 0
+      },
+      "config.py": {
+        "coverage": 66.30434782608695,
+        "statements": 92,
+        "missing": 31
+      },
+      "demo.py": {
+        "coverage": 0.0,
+        "statements": 152,
+        "missing": 152
+      },
+      "main_index.py": {
+        "coverage": 0.0,
+        "statements": 110,
+        "missing": 110
+      },
+      "main_search.py": {
+        "coverage": 0.0,
+        "statements": 167,
+        "missing": 167
+      },
+      "processors/__init__.py": {
+        "coverage": 100.0,
+        "statements": 2,
+        "missing": 0
+      },
+      "processors/image_processor.py": {
+        "coverage": 70.24793388429752,
+        "statements": 121,
+        "missing": 36
+      },
+      "schemas/__init__.py": {
+        "coverage": 100.0,
+        "statements": 2,
+        "missing": 0
+      },
+      "schemas/data_models.py": {
+        "coverage": 97.29729729729729,
+        "statements": 37,
+        "missing": 1
+      },
+      "tests/__init__.py": {
+        "coverage": 100.0,
+        "statements": 0,
+        "missing": 0
+      },
+      "tests/conftest.py": {
+        "coverage": 66.96428571428571,
+        "statements": 112,
+        "missing": 37
+      },
+      "tests/unit/__init__.py": {
+        "coverage": 100.0,
+        "statements": 0,
+        "missing": 0
+      },
+      "utils/__init__.py": {
+        "coverage": 100.0,
+        "statements": 4,
+        "missing": 0
+      },
+      "utils/image_utils.py": {
+        "coverage": 61.71875,
+        "statements": 128,
+        "missing": 49
+      },
+      "utils/logger.py": {
+        "coverage": 73.91304347826087,
+        "statements": 23,
+        "missing": 6
+      },
+      "utils/retry_utils.py": {
+        "coverage": 52.80898876404494,
+        "statements": 89,
+        "missing": 42
+      },
+      "vector_store/__init__.py": {
+        "coverage": 100.0,
+        "statements": 2,
+        "missing": 0
+      },
+      "vector_store/faiss_store.py": {
+        "coverage": 54.67289719626168,
+        "statements": 214,
+        "missing": 97
+      }
+    },
+    "error": null
+  },
+  "complexity_analysis": {
+    "total_functions": 13,
+    "total_classes": 11,
+    "average_function_length": 31.625,
+    "files_with_high_complexity": []
+  }
+}
