@@ -208,7 +208,7 @@ __marimo__/
 
 # project gitignore
 dataset/
-
+testdata/
 # Project specific directories
 output/
 index/
