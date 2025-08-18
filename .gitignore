@@ -232,3 +232,5 @@ coverage.json
 
 # Claude Code settings
 .claude/
+# Allow agents directory to be version controlled
+!.claude/agents/

@@ -4,10 +4,12 @@ Embedding处理器 - 负责向量化和存储管理
 import logging
 from typing import List, Dict, Any, Optional
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import numpy as np
 
 from clients.qwen_client import QwenClient
 from vector_store.faiss_store import FaissStore
+from config.embedding_config import EmbeddingProcessorConfig, default_embedding_config
 from utils.logger import logger
 
 logger = logging.getLogger(__name__)
@@ -23,30 +25,74 @@ class EmbeddingProcessor:
         self,
         qwen_client: Optional[QwenClient] = None,
         vector_store: Optional[FaissStore] = None,
-        embedding_dimension: int = 1024,  # dashscope embedding模型的维度
-        index_save_path: str = "data/faiss_index"
+        config: Optional[EmbeddingProcessorConfig] = None
     ):
         """
         初始化Embedding处理器
         
         Args:
             qwen_client: Qwen客户端实例
-            vector_store: FAISS存储实例  
-            embedding_dimension: 向量维度
-            index_save_path: 索引保存路径
+            vector_store: FAISS存储实例
+            config: EmbeddingProcessor配置
         """
+        self.config = config or default_embedding_config
+        self.config.validate()
+        
         self.qwen_client = qwen_client or QwenClient()
-        self.vector_store = vector_store or FaissStore(dimension=embedding_dimension)
-        self.embedding_dimension = embedding_dimension
-        self.index_save_path = index_save_path
+        
+        # 初始化embedding维度
+        if self.config.embedding_dimension is None:
+            self._detected_dimension = self._detect_embedding_dimension()
+            self.embedding_dimension = self._detected_dimension
+        else:
+            self.embedding_dimension = self.config.embedding_dimension
+        
+        self.vector_store = vector_store or FaissStore(dimension=self.embedding_dimension)
+        self.index_save_path = self.config.index_save_path
         
         # 确保保存目录存在
-        Path(index_save_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(self.index_save_path).parent.mkdir(parents=True, exist_ok=True)
         
         # 加载已有索引（如果存在）
         self._load_existing_index()
         
-        logger.info(f"EmbeddingProcessor初始化完成，维度: {embedding_dimension}")
+        logger.info(f"EmbeddingProcessor初始化完成，维度: {self.embedding_dimension}")
+    
+    def _detect_embedding_dimension(self) -> int:
+        """
+        自动检测embedding维度
+        
+        Returns:
+            检测到的embedding维度
+        """
+        try:
+            logger.info("自动检测embedding维度...")
+            response = self.qwen_client.get_text_embedding("dimension detection test")
+            dimension = len(response['embedding'])
+            logger.info(f"检测到embedding维度: {dimension}")
+            return dimension
+        except Exception as e:
+            logger.warning(f"维度检测失败，使用默认维度: {e}")
+            return self.config.default_embedding_dimension
+    
+    def _validate_dimension(self, vector: np.ndarray, context: str) -> bool:
+        """
+        验证向量维度一致性
+        
+        Args:
+            vector: 待验证的向量
+            context: 上下文信息
+            
+        Returns:
+            是否维度一致
+        """
+        if vector.shape[0] != self.embedding_dimension:
+            logger.error(
+                f"{context} 向量维度不匹配: 期望{self.embedding_dimension}, "
+                f"实际{vector.shape[0]}"
+            )
+            return False
+        return True
     
     def _load_existing_index(self) -> bool:
         """
@@ -87,10 +133,9 @@ class EmbeddingProcessor:
             response = self.qwen_client.get_text_embedding(text)
             text_vector = np.array(response['embedding'], dtype=np.float32)
             
-            # 验证并调整维度
-            if text_vector.shape[0] != self.embedding_dimension:
-                logger.warning(f"向量维度不匹配，自动调整: 期望{self.embedding_dimension}, 实际{text_vector.shape[0]}")
-                self.embedding_dimension = text_vector.shape[0]
+            # 验证维度一致性
+            if not self._validate_dimension(text_vector, "文本处理"):
+                return False
             
             # 存储向量
             success = self.vector_store.add_vectors(
@@ -100,7 +145,8 @@ class EmbeddingProcessor:
             
             if success:
                 logger.info(f"成功处理文本数据: {text_id}")
-                self.save_index()
+                if self.config.auto_save:
+                    self.save_index()
                 return True
             else:
                 logger.error(f"文本数据处理失败: {text_id}")
@@ -128,10 +174,9 @@ class EmbeddingProcessor:
             response = self.qwen_client.get_image_embedding(image_base64)
             image_vector = np.array(response['embedding'], dtype=np.float32)
             
-            # 验证并调整维度
-            if image_vector.shape[0] != self.embedding_dimension:
-                logger.warning(f"向量维度不匹配，自动调整: 期望{self.embedding_dimension}, 实际{image_vector.shape[0]}")
-                self.embedding_dimension = image_vector.shape[0]
+            # 验证维度一致性
+            if not self._validate_dimension(image_vector, "图片处理"):
+                return False
             
             # 存储向量
             success = self.vector_store.add_vectors(
@@ -141,7 +186,8 @@ class EmbeddingProcessor:
             
             if success:
                 logger.info(f"成功处理base64图片: {image_id}")
-                self.save_index()
+                if self.config.auto_save:
+                    self.save_index()
                 return True
             else:
                 logger.error(f"base64图片处理失败: {image_id}")
@@ -188,10 +234,9 @@ class EmbeddingProcessor:
                     # 继续处理其他人脸
                     continue
             
-            # 验证并调整维度
-            if vectors_to_store and vectors_to_store[0].shape[0] != self.embedding_dimension:
-                logger.warning(f"向量维度不匹配，自动调整: 期望{self.embedding_dimension}, 实际{vectors_to_store[0].shape[0]}")
-                self.embedding_dimension = vectors_to_store[0].shape[0]
+            # 验证维度一致性
+            if vectors_to_store and not self._validate_dimension(vectors_to_store[0], "人脸处理"):
+                return False
             
             # 批量存储向量
             if vectors_to_store:
@@ -200,7 +245,8 @@ class EmbeddingProcessor:
                 
                 if success:
                     logger.info(f"成功存储 {len(vectors_to_store)} 个向量: {image_id}")
-                    self.save_index()
+                    if self.config.auto_save:
+                        self.save_index()
                     return True
                 else:
                     logger.error(f"向量存储失败: {image_id}")
@@ -212,6 +258,93 @@ class EmbeddingProcessor:
         except Exception as e:
             logger.error(f"处理带人脸图片失败: {image_id}, 错误: {e}")
             return False
+    
+    def _process_single_text(self, text: str, text_id: str) -> bool:
+        """
+        处理单个文本（不自动保存索引，用于批量处理）
+        
+        Args:
+            text: 文本内容
+            text_id: 文本唯一标识
+            
+        Returns:
+            是否处理成功
+        """
+        try:
+            response = self.qwen_client.get_text_embedding(text)
+            text_vector = np.array(response['embedding'], dtype=np.float32)
+            
+            # 验证维度一致性
+            if not self._validate_dimension(text_vector, f"文本处理-{text_id}"):
+                return False
+            
+            # 存储向量（不自动保存索引）
+            success = self.vector_store.add_vectors(
+                vectors=text_vector.reshape(1, -1),
+                ids=[text_id]
+            )
+            
+            if success:
+                logger.debug(f"成功处理文本数据: {text_id}")
+                return True
+            else:
+                logger.error(f"文本数据处理失败: {text_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"处理文本数据失败: {text_id}, 错误: {e}")
+            return False
+    
+    def _process_text_batch(self, texts: List[str], text_ids: List[str]) -> Dict[str, Any]:
+        """
+        内部批量处理文本的实际实现
+        
+        Args:
+            texts: 文本列表
+            text_ids: 文本ID列表
+            
+        Returns:
+            处理结果统计
+        """
+        results = {
+            "success": 0,
+            "failed": 0,
+            "failed_items": []
+        }
+        
+        # 使用线程池并行处理
+        if self.config.enable_parallel_processing and len(texts) > 1:
+            with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
+                # 提交所有任务
+                future_to_id = {
+                    executor.submit(self._process_single_text, text, text_id): text_id
+                    for text, text_id in zip(texts, text_ids)
+                }
+                
+                # 收集结果
+                for future in as_completed(future_to_id):
+                    text_id = future_to_id[future]
+                    try:
+                        success = future.result()
+                        if success:
+                            results["success"] += 1
+                        else:
+                            results["failed"] += 1
+                            results["failed_items"].append(text_id)
+                    except Exception as e:
+                        logger.error(f"并行处理文本失败: {text_id}, 错误: {e}")
+                        results["failed"] += 1
+                        results["failed_items"].append(text_id)
+        else:
+            # 串行处理
+            for text, text_id in zip(texts, text_ids):
+                if self._process_single_text(text, text_id):
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+                    results["failed_items"].append(text_id)
+        
+        return results
     
     def process_batch_texts(self, texts: List[str], text_ids: List[str]) -> Dict[str, Any]:
         """
@@ -236,26 +369,128 @@ class EmbeddingProcessor:
         
         logger.info(f"开始批量处理 {len(texts)} 个文本")
         
-        for i, (text, text_id) in enumerate(zip(texts, text_ids)):
-            logger.info(f"处理进度: {i+1}/{len(texts)} - {text_id}")
+        # 限制批量大小
+        max_batch_size = self.config.max_batch_size
+        if len(texts) > max_batch_size:
+            logger.warning(f"批量大小 {len(texts)} 超过限制 {max_batch_size}，将分批处理")
+        
+        # 分批处理
+        total_processed = 0
+        for i in range(0, len(texts), max_batch_size):
+            batch_texts = texts[i:i + max_batch_size]
+            batch_ids = text_ids[i:i + max_batch_size]
             
-            if self.process_text(text, text_id):
-                results["success"] += 1
-            else:
-                results["failed"] += 1
-                results["failed_items"].append(text_id)
+            logger.info(f"处理批次 {i//max_batch_size + 1}: {len(batch_texts)} 个文本")
             
-            # 每处理10个就保存一次索引
-            if (i + 1) % 10 == 0:
-                logger.info(f"处理了{i+1}个项目，保存索引...")
-                self.save_index()
+            # 处理当前批次
+            batch_results = self._process_text_batch(batch_texts, batch_ids)
+            
+            # 累计结果
+            results["success"] += batch_results["success"]
+            results["failed"] += batch_results["failed"]
+            results["failed_items"].extend(batch_results["failed_items"])
+            
+            total_processed += len(batch_texts)
+            
+            # 定期保存索引
+            if total_processed % self.config.batch_save_frequency == 0:
+                logger.info(f"处理了{total_processed}个项目，保存索引...")
+                if self.config.auto_save:
+                    self.save_index()
         
         # 最终保存索引
-        if results["success"] > 0:
+        if results["success"] > 0 and self.config.auto_save:
             logger.info("批量处理完成，保存最终索引...")
             self.save_index()
             
         logger.info(f"批量处理完成: 成功{results['success']}, 失败{results['failed']}")
+        return results
+    
+    def _process_single_image(self, image_base64: str, image_id: str) -> bool:
+        """
+        处理单个图片（不自动保存索引，用于批量处理）
+        
+        Args:
+            image_base64: 图片base64编码
+            image_id: 图片唯一标识
+            
+        Returns:
+            是否处理成功
+        """
+        try:
+            response = self.qwen_client.get_image_embedding(image_base64)
+            image_vector = np.array(response['embedding'], dtype=np.float32)
+            
+            # 验证维度一致性
+            if not self._validate_dimension(image_vector, f"图片处理-{image_id}"):
+                return False
+            
+            # 存储向量（不自动保存索引）
+            success = self.vector_store.add_vectors(
+                vectors=image_vector.reshape(1, -1),
+                ids=[image_id]
+            )
+            
+            if success:
+                logger.debug(f"成功处理base64图片: {image_id}")
+                return True
+            else:
+                logger.error(f"base64图片处理失败: {image_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"处理base64图片失败: {image_id}, 错误: {e}")
+            return False
+    
+    def _process_image_batch(self, images_base64: List[str], image_ids: List[str]) -> Dict[str, Any]:
+        """
+        内部批量处理图片的实际实现
+        
+        Args:
+            images_base64: 图片base64列表
+            image_ids: 图片ID列表
+            
+        Returns:
+            处理结果统计
+        """
+        results = {
+            "success": 0,
+            "failed": 0,
+            "failed_items": []
+        }
+        
+        # 使用线程池并行处理
+        if self.config.enable_parallel_processing and len(images_base64) > 1:
+            with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
+                # 提交所有任务
+                future_to_id = {
+                    executor.submit(self._process_single_image, image_base64, image_id): image_id
+                    for image_base64, image_id in zip(images_base64, image_ids)
+                }
+                
+                # 收集结果
+                for future in as_completed(future_to_id):
+                    image_id = future_to_id[future]
+                    try:
+                        success = future.result()
+                        if success:
+                            results["success"] += 1
+                        else:
+                            results["failed"] += 1
+                            results["failed_items"].append(image_id)
+                    except Exception as e:
+                        logger.error(f"并行处理图片失败: {image_id}, 错误: {e}")
+                        results["failed"] += 1
+                        results["failed_items"].append(image_id)
+        else:
+            # 串行处理
+            for image_base64, image_id in zip(images_base64, image_ids):
+                if self._process_single_image(image_base64, image_id):
+                    results["success"] += 1
+                else:
+                    results["failed"] += 1
+                    results["failed_items"].append(image_id)
+        
         return results
     
     def process_batch_images(self, images_base64: List[str], image_ids: List[str]) -> Dict[str, Any]:
@@ -281,29 +516,44 @@ class EmbeddingProcessor:
         
         logger.info(f"开始批量处理 {len(images_base64)} 个图片")
         
-        for i, (image_base64, image_id) in enumerate(zip(images_base64, image_ids)):
-            logger.info(f"处理进度: {i+1}/{len(images_base64)} - {image_id}")
+        # 限制批量大小
+        max_batch_size = self.config.max_batch_size
+        if len(images_base64) > max_batch_size:
+            logger.warning(f"批量大小 {len(images_base64)} 超过限制 {max_batch_size}，将分批处理")
+        
+        # 分批处理
+        total_processed = 0
+        for i in range(0, len(images_base64), max_batch_size):
+            batch_images = images_base64[i:i + max_batch_size]
+            batch_ids = image_ids[i:i + max_batch_size]
             
-            if self.process_image_base64(image_base64, image_id):
-                results["success"] += 1
-            else:
-                results["failed"] += 1
-                results["failed_items"].append(image_id)
+            logger.info(f"处理批次 {i//max_batch_size + 1}: {len(batch_images)} 个图片")
             
-            # 每处理10个就保存一次索引
-            if (i + 1) % 10 == 0:
-                logger.info(f"处理了{i+1}个项目，保存索引...")
-                self.save_index()
+            # 处理当前批次
+            batch_results = self._process_image_batch(batch_images, batch_ids)
+            
+            # 累计结果
+            results["success"] += batch_results["success"]
+            results["failed"] += batch_results["failed"]
+            results["failed_items"].extend(batch_results["failed_items"])
+            
+            total_processed += len(batch_images)
+            
+            # 定期保存索引
+            if total_processed % self.config.batch_save_frequency == 0:
+                logger.info(f"处理了{total_processed}个项目，保存索引...")
+                if self.config.auto_save:
+                    self.save_index()
         
         # 最终保存索引
-        if results["success"] > 0:
+        if results["success"] > 0 and self.config.auto_save:
             logger.info("批量处理完成，保存最终索引...")
             self.save_index()
             
         logger.info(f"批量处理完成: 成功{results['success']}, 失败{results['failed']}")
         return results
     
-    def search_by_text(self, query_text: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    def search_by_text(self, query_text: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         基于文本查询搜索相似向量
         
@@ -315,6 +565,8 @@ class EmbeddingProcessor:
             搜索结果列表
         """
         try:
+            if top_k is None:
+                top_k = self.config.default_top_k
             logger.info(f"文本搜索: {query_text}, top_k: {top_k}")
             
             # 生成查询向量
@@ -347,7 +599,7 @@ class EmbeddingProcessor:
             logger.error(f"文本搜索失败: {e}")
             return []
     
-    def search_by_image(self, image_base64: str, top_k: int = 10) -> List[Dict[str, Any]]:
+    def search_by_image(self, image_base64: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         基于图片查询搜索相似向量
         
@@ -359,6 +611,8 @@ class EmbeddingProcessor:
             搜索结果列表
         """
         try:
+            if top_k is None:
+                top_k = self.config.default_top_k
             logger.info(f"图片搜索, top_k: {top_k}")
             
             # 生成查询向量
@@ -424,7 +678,14 @@ class EmbeddingProcessor:
             "index_type": vector_stats.get("index_type", ""),
             "embedding_dimension": self.embedding_dimension,
             "index_path": self.index_save_path,
-            "id_mapping_size": vector_stats.get("id_mapping_size", 0)
+            "id_mapping_size": vector_stats.get("id_mapping_size", 0),
+            "config": {
+                "batch_save_frequency": self.config.batch_save_frequency,
+                "max_batch_size": self.config.max_batch_size,
+                "parallel_processing": self.config.enable_parallel_processing,
+                "max_workers": self.config.max_workers,
+                "auto_save": self.config.auto_save
+            }
         }
     
     def rebuild_index(self, remove_ids: Optional[List[str]] = None) -> bool:
