@@ -6,6 +6,7 @@ import json
 from clients.prompt_manager import PromptManager, PromptType
 
 
+@pytest.mark.unit
 class TestPromptManager:
     """PromptManager 测试类"""
     

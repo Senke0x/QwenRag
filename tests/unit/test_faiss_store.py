@@ -6,12 +6,12 @@ import os
 import tempfile
 import shutil
 import numpy as np
-from unittest.mock import Mock, patch, MagicMock
 
 from schemas.data_models import ImageMetadata, ProcessingStatus
 from vector_store.faiss_store import FaissStore
 
 
+@pytest.mark.unit
 class TestFaissStore:
     """FAISS存储测试类"""
     

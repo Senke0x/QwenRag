@@ -70,7 +70,6 @@ class TestImageProcessorRealAPI:
         return dataset_images[0]
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_image_processor_initialization_real_api(self, real_processor):
         """测试ImageProcessor初始化功能"""
         # 验证组件正确初始化
@@ -85,7 +84,6 @@ class TestImageProcessorRealAPI:
         assert client_info['model'] != ""
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_analyze_image_single_screenshot_real_api(self, real_processor, single_test_image):
         """测试analyze_image()函数处理单张截图"""
         try:
@@ -127,7 +125,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"analyze_image调用失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_process_image_single_screenshot_real_api(self, real_processor, single_test_image):
         """测试process_image()函数生成完整元数据"""
         try:
@@ -166,7 +163,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"process_image调用失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_process_images_batch_real_api(self, real_processor, dataset_images):
         """测试批量处理功能"""
         # 限制批量测试的图片数量，避免API调用过多
@@ -223,7 +219,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"process_images_batch调用失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_extract_face_embeddings_real_api(self, real_processor, dataset_images):
         """测试人脸提取功能"""
         # 选择一张图片进行测试
@@ -269,7 +264,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"extract_face_embeddings调用失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_api_error_handling_real_api(self, real_processor):
         """测试错误处理机制"""
         # 测试不存在的文件
@@ -294,7 +288,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"错误处理测试失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_different_image_analysis_real_api(self, real_processor, dataset_images):
         """测试不同图片的分析结果差异"""
         if len(dataset_images) < 2:
@@ -341,7 +334,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"多图片分析测试失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_image_metadata_consistency_real_api(self, real_processor, single_test_image):
         """测试元数据一致性"""
         try:
@@ -389,7 +381,6 @@ class TestImageProcessorRealAPI:
             pytest.fail(f"元数据一致性测试失败: {e}")
     
     @pytest.mark.integration
-    @pytest.mark.real_api
     def test_api_response_parsing_robustness_real_api(self, real_processor, single_test_image):
         """测试API响应解析的鲁棒性"""
         try:
