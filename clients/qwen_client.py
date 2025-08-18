@@ -3,10 +3,14 @@ Qwen API 统一客户端
 """
 import logging
 import json
-import re
 import sys
-from typing import Dict, Any, List, Optional
+import base64
+import io
+from typing import Dict, Any, Optional
 from openai import OpenAI
+from PIL import Image
+import dashscope
+from http import HTTPStatus
 
 from config import QwenVLConfig, RetryConfig
 from utils.retry_utils import retry_with_backoff, RetryableError, NonRetryableError
@@ -66,6 +70,9 @@ class QwenClient:
             api_key=self.qwen_config.api_key,
             base_url=self.qwen_config.base_url
         )
+        
+        # 设置dashscope API密钥
+        dashscope.api_key = self.qwen_config.api_key
         
         logger.info(f"Qwen客户端初始化完成，模型: {self.qwen_config.model}")
     
@@ -303,6 +310,181 @@ class QwenClient:
             logger.error(f"Qwen API调用失败: {e}")
             raise self._handle_api_error(e)
     
+    @retry_with_backoff()
+    def get_text_embedding(self, text: str, model: str = "text-embedding-v4") -> Dict[str, Any]:
+        """
+        获取文本的embedding向量（使用dashscope SDK）
+        
+        Args:
+            text: 要转换的文本
+            model: embedding模型名称，默认使用text-embedding-v4
+            
+        Returns:
+            包含embedding向量的响应字典
+        """
+        try:
+            # 使用dashscope SDK调用text embedding
+            resp = dashscope.TextEmbedding.call(
+                model=model,
+                input=text
+            )
+            
+            if resp.status_code == HTTPStatus.OK:
+                # 提取embedding向量（假设是单个文本）
+                embedding_vector = resp.output['embeddings'][0]['embedding']
+                
+                embedding_data = {
+                    "embedding": embedding_vector,
+                    "model": model,
+                    "status_code": resp.status_code,
+                    "request_id": getattr(resp, "request_id", ""),
+                    "usage": resp.usage if hasattr(resp, 'usage') else None
+                }
+                
+                # 记录请求和响应日志
+                request_data = {
+                    "model": model,
+                    "input": text[:100] + "..." if len(text) > 100 else text,
+                    "sdk": "dashscope"
+                }
+                
+                response_content = f"embedding_dimension: {len(embedding_vector)}, model: {model}, status: {resp.status_code}"
+                self._log_request_response(request_data, response_content, "get_text_embedding")
+                
+                return embedding_data
+            else:
+                error_msg = f"Text embedding failed: status_code={resp.status_code}, code={getattr(resp, 'code', '')}, message={getattr(resp, 'message', '')}"
+                logger.error(error_msg)
+                raise QwenVLError(error_msg)
+            
+        except Exception as e:
+            logger.error(f"获取文本embedding失败: {e}")
+            raise self._handle_api_error(e)
+    
+    @retry_with_backoff()
+    def get_image_embedding(self, image_base64: str, model: str = "multimodal-embedding-v1") -> Dict[str, Any]:
+        """
+        获取图片的embedding向量（使用dashscope multimodal embedding）
+        
+        Args:
+            image_base64: 图片的base64编码
+            model: embedding模型名称，默认使用multimodal-embedding-v1
+            
+        Returns:
+            包含embedding向量的响应字典
+        """
+        try:
+            # 构建图片数据格式（按照您提供的示例格式）
+            image_data = f"data:image/jpeg;base64,{image_base64}"
+            input_data = [{'image': image_data}]
+            
+            # 使用dashscope SDK调用multimodal embedding
+            resp = dashscope.MultiModalEmbedding.call(
+                model=model,
+                input=input_data
+            )
+            
+            if resp.status_code == HTTPStatus.OK:
+                # 提取embedding向量（假设是单个图片）
+                embedding_vector = resp.output['embeddings'][0]['embedding']
+                
+                embedding_data = {
+                    "embedding": embedding_vector,
+                    "model": model,
+                    "status_code": resp.status_code,
+                    "request_id": getattr(resp, "request_id", ""),
+                    "usage": resp.usage if hasattr(resp, 'usage') else None
+                }
+                
+                # 记录请求和响应日志
+                request_data = {
+                    "model": model,
+                    "input": f"image_base64_length: {len(image_base64)}",
+                    "sdk": "dashscope"
+                }
+                
+                response_content = f"embedding_dimension: {len(embedding_vector)}, model: {model}, status: {resp.status_code}"
+                self._log_request_response(request_data, response_content, "get_image_embedding")
+                
+                return embedding_data
+            else:
+                error_msg = f"Image embedding failed: status_code={resp.status_code}, code={getattr(resp, 'code', '')}, message={getattr(resp, 'message', '')}"
+                logger.error(error_msg)
+                raise QwenVLError(error_msg)
+            
+        except Exception as e:
+            logger.error(f"获取图片embedding失败: {e}")
+            raise self._handle_api_error(e)
+    
+    def _crop_face_from_base64(self, image_base64: str, face_rect: Dict[str, int]) -> str:
+        """
+        从 base64 图片中裁剪人脸区域
+        
+        Args:
+            image_base64: 图片的base64编码
+            face_rect: 人脸矩形区域 {"x": int, "y": int, "width": int, "height": int}
+            
+        Returns:
+            裁剪后的人脸图片base64编码
+        """
+        try:
+            # 解码base64图片
+            image_data = base64.b64decode(image_base64)
+            image = Image.open(io.BytesIO(image_data))
+            
+            # 获取裁剪区域
+            x = face_rect["x"]
+            y = face_rect["y"]
+            width = face_rect["width"]
+            height = face_rect["height"]
+            
+            # 裁剪人脸区域（扩大一些边界以包含更多上下文）
+            padding = min(width, height) * 0.2  # 20%的填充
+            x1 = max(0, int(x - padding))
+            y1 = max(0, int(y - padding))
+            x2 = min(image.width, int(x + width + padding))
+            y2 = min(image.height, int(y + height + padding))
+            
+            # 裁剪图片
+            face_image = image.crop((x1, y1, x2, y2))
+            
+            # 转换为base64
+            buffered = io.BytesIO()
+            face_image.save(buffered, format="JPEG", quality=95)
+            face_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
+            
+            logger.debug(f"裁剪人脸成功: {x1},{y1} -> {x2},{y2}")
+            return face_base64
+            
+        except Exception as e:
+            logger.error(f"裁剪人脸失败: {e}")
+            raise
+    
+    @retry_with_backoff()
+    def get_face_embedding(self, image_base64: str, face_rect: Dict[str, int], model: str = "multimodal-embedding-v1") -> Dict[str, Any]:
+        """
+        获取人脸区域的embedding向量
+        
+        Args:
+            image_base64: 原图片的base64编码
+            face_rect: 人脸矩形区域
+            model: embedding模型名称
+            
+        Returns:
+            包含embedding向量的响应字典
+        """
+        try:
+            # 裁剪人脸图片
+            face_base64 = self._crop_face_from_base64(image_base64, face_rect)
+            
+            # 获取人脸图片的embedding（使用multimodal embedding）
+            return self.get_image_embedding(face_base64, model)
+            
+        except Exception as e:
+            logger.error(f"获取人脸embedding失败: {e}")
+            raise self._handle_api_error(e)
+    
+    
     def get_client_info(self) -> Dict[str, Any]:
         """获取客户端信息"""
         return {
@@ -310,5 +492,10 @@ class QwenClient:
             "base_url": self.qwen_config.base_url,
             "max_tokens": self.qwen_config.max_tokens,
             "temperature": self.qwen_config.temperature,
-            "timeout": self.qwen_config.timeout
+            "timeout": self.qwen_config.timeout,
+            "supported_embedding_models": {
+                "text": "text-embedding-v4 (via dashscope SDK)",
+                "image": "multimodal-embedding-v1 (via dashscope SDK)"
+            },
+            "dashscope_api_configured": dashscope.api_key is not None
         }
