@@ -55,10 +55,39 @@ class QwenClient:
             retry_config: 重试配置
             enable_logging: 是否启用请求/响应日志
         """
-        from config import config as default_config
+        # 直接从根级config.py导入，避免循环导入问题
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
         
-        self.qwen_config = qwen_config or default_config.qwen_vl
-        self.retry_config = retry_config or default_config.retry
+        # 直接从根级config.py导入
+        import importlib.util
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.py')
+        spec = importlib.util.spec_from_file_location("root_config", config_path)
+        root_config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(root_config)
+        
+        # 尝试获取默认配置
+        try:
+            if hasattr(root_config, 'config') and root_config.config and hasattr(root_config.config, 'qwen_vl'):
+                default_qwen_config = root_config.config.qwen_vl
+            else:
+                default_qwen_config = root_config.QwenVLConfig()
+        except:
+            default_qwen_config = root_config.QwenVLConfig()
+        
+        self.qwen_config = qwen_config or default_qwen_config
+        
+        # 处理retry_config，使用同样的方式
+        try:
+            if hasattr(root_config, 'config') and root_config.config and hasattr(root_config.config, 'retry'):
+                default_retry_config = root_config.config.retry
+            else:
+                default_retry_config = root_config.RetryConfig()
+        except:
+            default_retry_config = root_config.RetryConfig()
+        
+        self.retry_config = retry_config or default_retry_config
         self.enable_logging = enable_logging
         
         # 验证API密钥

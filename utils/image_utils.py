@@ -14,6 +14,16 @@ from config import ImageProcessorConfig
 logger = logging.getLogger(__name__)
 
 
+def get_supported_image_extensions() -> List[str]:
+    """
+    获取支持的图片格式扩展名列表
+    
+    Returns:
+        支持的图片格式扩展名列表
+    """
+    return ['jpg', 'jpeg', 'png', 'bmp', 'gif', 'webp', 'tiff']
+
+
 def is_supported_image_format(file_path: str, config: ImageProcessorConfig) -> bool:
     """
     检查文件是否为支持的图片格式

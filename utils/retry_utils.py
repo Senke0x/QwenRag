@@ -7,7 +7,17 @@ from typing import Callable, Any, Optional, Type, Tuple
 from functools import wraps
 import logging
 
-from config import RetryConfig
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+
+# 直接从根级config.py导入
+import importlib.util
+config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.py')
+spec = importlib.util.spec_from_file_location("root_config", config_path)
+root_config = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(root_config)
+_RetryConfig = root_config.RetryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +32,7 @@ class NonRetryableError(Exception):
     pass
 
 
-def calculate_delay(attempt: int, config: RetryConfig) -> float:
+def calculate_delay(attempt: int, config: _RetryConfig) -> float:
     """
     计算重试延迟时间（指数退避 + 抖动）
     
@@ -45,7 +55,7 @@ def calculate_delay(attempt: int, config: RetryConfig) -> float:
     return delay + jitter
 
 
-def is_retryable_error(error: Exception, config: RetryConfig) -> bool:
+def is_retryable_error(error: Exception, config: _RetryConfig) -> bool:
     """
     判断错误是否可重试
     
@@ -83,7 +93,7 @@ def is_retryable_error(error: Exception, config: RetryConfig) -> bool:
 
 
 def retry_with_backoff(
-    config: Optional[RetryConfig] = None,
+    config: Optional[_RetryConfig] = None,
     exceptions: Tuple[Type[Exception], ...] = (Exception,)
 ):
     """
@@ -97,7 +107,7 @@ def retry_with_backoff(
         装饰器函数
     """
     if config is None:
-        config = RetryConfig()
+        config = _RetryConfig()
     
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)
@@ -152,7 +162,7 @@ def retry_with_backoff(
 
 
 def retry_async_with_backoff(
-    config: Optional[RetryConfig] = None,
+    config: Optional[_RetryConfig] = None,
     exceptions: Tuple[Type[Exception], ...] = (Exception,)
 ):
     """
@@ -168,7 +178,7 @@ def retry_async_with_backoff(
     import asyncio
     
     if config is None:
-        config = RetryConfig()
+        config = _RetryConfig()
     
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         @wraps(func)

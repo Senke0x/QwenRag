@@ -35,11 +35,28 @@ class ImageProcessor:
             qwen_client: Qwen 客户端实例
             prompt_manager: 提示词管理器实例
         """
-        from config import config as default_config
+        # 直接从根级config.py导入，避免循环导入问题
+        import sys
+        import os
+        sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+        
+        import importlib.util
+        config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.py')
+        spec = importlib.util.spec_from_file_location("root_config", config_path)
+        root_config = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(root_config)
         
         self.qwen_client = qwen_client or QwenClient()
         self.prompt_manager = prompt_manager or PromptManager()
-        self.image_config = default_config.image_processor
+        
+        # 获取image processor配置
+        try:
+            if hasattr(root_config, 'config') and root_config.config and hasattr(root_config.config, 'image_processor'):
+                self.image_config = root_config.config.image_processor
+            else:
+                self.image_config = root_config.ImageProcessorConfig()
+        except:
+            self.image_config = root_config.ImageProcessorConfig()
         
         logger.info("图片处理器初始化完成")
     
