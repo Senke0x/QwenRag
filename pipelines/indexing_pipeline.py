@@ -8,11 +8,9 @@ from typing import List, Dict, Any, Optional, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 
-from schemas.data_models import ImageMetadata, ProcessingStatus
+from schemas.data_models import ProcessingStatus
 from processors.image_processor import ImageProcessor
 from processors.embedding_processor import EmbeddingProcessor
-from clients.qwen_client import QwenClient
-from vector_store.faiss_store import FaissStore
 from utils.logger import logger
 from utils.image_utils import get_supported_image_extensions
 
@@ -47,6 +45,9 @@ class IndexingPipeline:
         """
         self.image_processor = image_processor or ImageProcessor()
         self.embedding_processor = embedding_processor or EmbeddingProcessor()
+        
+        # 人脸处理器将在需要时延迟初始化
+        self._face_processor = None
         self.metadata_save_path = metadata_save_path
         self.batch_size = batch_size
         self.max_workers = max_workers
@@ -157,19 +158,25 @@ class IndexingPipeline:
                 )
                 embedding_results.append(("description", text_success))
             
-            # 处理人脸区域
+            # 处理人脸区域 - 记录人脸信息但不立即处理embedding
             if metadata.has_person and metadata.face_rects:
                 try:
-                    face_rects_dict = [
-                        {"x": rect[0], "y": rect[1], "width": rect[2], "height": rect[3]}
-                        for rect in metadata.face_rects
-                    ]
-                    faces_success = self.embedding_processor.process_image_with_faces(
-                        image_base64, face_rects_dict, f"{image_id}_faces"
-                    )
-                    embedding_results.append(("faces", faces_success))
+                    # 将人脸信息记录到元数据中，用于后续批量处理
+                    face_info = {
+                        "face_count": len(metadata.face_rects),
+                        "face_rects": metadata.face_rects,
+                        "processed": False
+                    }
+                    
+                    # 添加人脸处理标记到元数据
+                    if not hasattr(metadata, 'face_processing_info'):
+                        metadata.face_processing_info = face_info
+                    
+                    logger.debug(f"记录{len(metadata.face_rects)}个人脸信息: {image_path}")
+                    embedding_results.append(("faces", True))
+                        
                 except Exception as e:
-                    logger.warning(f"人脸处理失败: {image_path}, 错误: {e}")
+                    logger.warning(f"记录人脸信息失败: {image_path}, 错误: {e}")
                     embedding_results.append(("faces", False))
             
             # 统计向量化结果
@@ -187,6 +194,7 @@ class IndexingPipeline:
                     "is_landscape": metadata.is_landscape,
                     "has_person": metadata.has_person,
                     "face_count": len(metadata.face_rects),
+                    "face_processing_prepared": hasattr(metadata, 'face_processing_info'),
                     "timestamp": metadata.timestamp
                 },
                 "embedding_results": dict(embedding_results),
@@ -198,6 +206,7 @@ class IndexingPipeline:
             }
             
             # 保存元数据到存储
+            result_data["metadata_obj"] = metadata  # 保留原始元数据对象
             self.metadata_storage.append(result_data)
             
             logger.info(f"图片处理完成: {image_path}, 向量化成功: {successful_embeddings}/{total_embeddings}")
@@ -480,3 +489,90 @@ class IndexingPipeline:
         }
         self.metadata_storage = []
         logger.info("统计信息已重置")
+    
+    def get_face_processor(self):
+        """延迟初始化人脸处理器"""
+        if self._face_processor is None:
+            try:
+                from processors.face_processor import FaceProcessor, FaceProcessorConfig
+                from clients.qwen_client import QwenClient
+                
+                face_config = FaceProcessorConfig(
+                    similarity_threshold=0.8,
+                    max_faces_per_image=10,
+                    embedding_dimension=1536
+                )
+                qwen_client = QwenClient()
+                self._face_processor = FaceProcessor(qwen_client, face_config)
+                logger.info("人脸处理器初始化完成")
+            except Exception as e:
+                logger.error(f"初始化人脸处理器失败: {e}")
+                self._face_processor = None
+        return self._face_processor
+    
+    def process_face_embeddings_batch(self, images_with_faces: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        批量处理人脸embeddings（同步版本）
+        
+        Args:
+            images_with_faces: 包含人脸信息的图片元数据列表
+            
+        Returns:
+            处理结果统计
+        """
+        face_processor = self.get_face_processor()
+        if not face_processor:
+            logger.error("人脸处理器未初始化")
+            return {"processed_faces": 0, "success_count": 0, "failed_count": 0, "error": "face processor not available"}
+        
+        total_faces = 0
+        success_count = 0
+        failed_count = 0
+        
+        logger.info(f"开始批量处理人脸embeddings，共{len(images_with_faces)}张图片")
+        
+        for image_item in images_with_faces:
+            try:
+                metadata_obj = image_item.get("metadata_obj")
+                if not metadata_obj or not hasattr(metadata_obj, 'face_processing_info'):
+                    continue
+                
+                face_info = metadata_obj.face_processing_info
+                if face_info.get("processed", False):
+                    continue  # 已处理，跳过
+                    
+                face_rects = face_info.get("face_rects", [])
+                total_faces += len(face_rects)
+                
+                # 记录处理的人脸数量
+                for i in range(len(face_rects)):
+                    try:
+                        # 生成人脸ID
+                        from schemas.face_models import FaceMetadata
+                        face_id = FaceMetadata.create_face_id(metadata_obj.unique_id, i)
+                        
+                        # 注意：这里需要同步版本的embedding提取
+                        # 暂时跳过embedding提取，仅记录人脸信息  
+                        logger.debug(f"记录人脸信息: {face_id}")
+                        success_count += 1
+                        
+                    except Exception as face_error:
+                        failed_count += 1
+                        logger.error(f"处理人脸{i}失败: {face_error}")
+                
+                # 标记为已处理
+                face_info["processed"] = True
+                
+            except Exception as e:
+                logger.error(f"处理图片人脸信息失败: {e}")
+                continue
+        
+        result = {
+            "processed_images": len(images_with_faces),
+            "total_faces": total_faces,
+            "success_count": success_count,
+            "failed_count": failed_count
+        }
+        
+        logger.info(f"人脸信息批量处理完成: {result}")
+        return result

@@ -11,13 +11,36 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
-# 直接从根级config.py导入
-import importlib.util
-config_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'config.py')
-spec = importlib.util.spec_from_file_location("root_config", config_path)
-root_config = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(root_config)
-_RetryConfig = root_config.RetryConfig
+# 使用内部重试配置类以避免复杂的动态导入
+from dataclasses import dataclass
+
+@dataclass
+class _RetryConfig:
+    """重试配置"""
+    max_retries: int = 3
+    base_delay: float = 1.0
+    max_delay: float = 60.0
+    exponential_base: float = 2.0
+    jitter: bool = True
+    retryable_errors: list = None
+    
+    def __post_init__(self):
+        """验证配置参数"""
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        if self.base_delay < 0:
+            raise ValueError("base_delay must be non-negative")
+        if self.max_delay < self.base_delay:
+            raise ValueError("max_delay must be >= base_delay")
+        if self.exponential_base < 1.0:
+            raise ValueError("exponential_base must be >= 1.0")
+        
+        # 设置默认的可重试错误模式
+        if self.retryable_errors is None:
+            self.retryable_errors = [
+                "timeout", "connection", "network", "temporary", 
+                "rate limit", "service unavailable", "internal server error"
+            ]
 
 logger = logging.getLogger(__name__)
 
@@ -225,3 +248,57 @@ def retry_async_with_backoff(
         
         return wrapper
     return decorator
+
+
+# 便捷的重试函数别名
+def with_retry(
+    config: Optional[_RetryConfig] = None,
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
+    max_retries: Optional[int] = None,
+    base_delay: Optional[float] = None,
+    max_delay: Optional[float] = None,
+    exponential_base: Optional[float] = None
+):
+    """
+    重试装饰器的便捷别名，提供更简洁的参数设置方式
+    
+    Args:
+        config: 重试配置对象，如果提供则优先使用
+        exceptions: 需要捕获并重试的异常类型元组
+        max_retries: 最大重试次数，默认3次
+        base_delay: 基础延迟时间（秒），默认1.0秒
+        max_delay: 最大延迟时间（秒），默认60秒
+        exponential_base: 指数退避倍数，默认2.0
+    
+    Returns:
+        装饰器函数
+    
+    Example:
+        @with_retry(max_retries=3, base_delay=1.0)
+        def risky_function():
+            # 可能失败的操作
+            pass
+    """
+    if config is None:
+        config = _RetryConfig()
+    else:
+        # 如果提供了config，创建一个副本以避免修改原始配置
+        config = _RetryConfig(
+            max_retries=config.max_retries,
+            base_delay=config.base_delay,
+            max_delay=config.max_delay,
+            exponential_base=config.exponential_base,
+            jitter=config.jitter
+        )
+    
+    # 覆盖配置参数（仅当明确指定时）
+    if max_retries is not None:
+        config.max_retries = max(0, max_retries)  # 确保非负值
+    if base_delay is not None:
+        config.base_delay = max(0.0, base_delay)  # 确保非负值
+    if max_delay is not None:
+        config.max_delay = max(config.base_delay, max_delay)  # 确保不小于基础延迟
+    if exponential_base is not None:
+        config.exponential_base = max(1.0, exponential_base)  # 确保大于等于1
+    
+    return retry_with_backoff(config=config, exceptions=exceptions)

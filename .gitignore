@@ -234,3 +234,6 @@ coverage.json
 .claude/
 # Allow agents directory to be version controlled
 !.claude/agents/
+
+# FAISS 相关的向量信息
+data/

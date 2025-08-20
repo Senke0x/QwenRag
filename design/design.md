@@ -32,37 +32,62 @@ graph TB
     subgraph "用户接口层"
         CLI[命令行工具]
         API[API接口]
+        DEMO[演示脚本]
     end
 
     subgraph "业务逻辑层"
         IP[图像处理器<br/>ImageProcessor]
+        EP[Embedding处理器<br/>EmbeddingProcessor]
         QC[Qwen客户端<br/>QwenClient]
         PM[提示词管理<br/>PromptManager]
+    end
+
+    subgraph "数据流水线层"
+        IDX_PIPE[索引管道<br/>IndexingPipeline]
+        RET_PIPE[检索管道<br/>RetrievalPipeline]
     end
 
     subgraph "存储层"
         FS[向量存储<br/>FaissStore]
         META[元数据存储<br/>JSON Files]
-        IDX[索引文件<br/>FAISS Index]
+        FAISS_IDX[索引文件<br/>FAISS Index]
     end
 
     subgraph "工具层"
         IU[图像工具<br/>ImageUtils]
         RU[重试工具<br/>RetryUtils]
         LOG[日志工具<br/>Logger]
+        CFG[配置管理<br/>Config]
     end
 
-    CLI --> IP
-    API --> IP
+    CLI --> IDX_PIPE
+    CLI --> RET_PIPE
+    DEMO --> IDX_PIPE
+    DEMO --> RET_PIPE
+    API --> IDX_PIPE
+    API --> RET_PIPE
+    
+    IDX_PIPE --> IP
+    IDX_PIPE --> EP
+    RET_PIPE --> EP
+    RET_PIPE --> FS
+    
     IP --> QC
     IP --> PM
+    EP --> QC
     QC --> FS
-    FS --> IDX
-    IP --> META
+    FS --> FAISS_IDX
+    IDX_PIPE --> META
+    
     IP --> IU
     QC --> RU
-    IP --> LOG
+    IDX_PIPE --> LOG
+    RET_PIPE --> LOG
+    EP --> CFG
 
+    style IDX_PIPE fill:#e3f2fd
+    style RET_PIPE fill:#e3f2fd
+    style EP fill:#e8f5e8
     style IP fill:#e1f5fe
     style QC fill:#e8f5e8
     style FS fill:#fff3e0
@@ -71,32 +96,39 @@ graph TB
 ### 数据流程图
 ``` mermaid
 graph LR
-    subgraph "索引流程"
-        A[图片输入] --> B[图像分析<br/>Qwen VL]
-        B --> C[内容识别]
-        B --> D[人脸检测]
-        C --> E[生成描述]
-        D --> F[提取人脸]
-        E --> G[向量化存储]
-        F --> G
-        G --> H[FAISS索引]
+    subgraph "索引构建流程"
+        A[图片目录] --> B[扫描图片文件]
+        B --> C[批量图像处理]
+        C --> D[Qwen VL分析]
+        D --> E[内容描述生成]
+        E --> F[Embedding向量化]
+        F --> G[向量索引构建]
+        G --> H[元数据存储]
+        H --> I[索引文件保存]
     end
 
-    subgraph "检索流程"
-        I[查询输入] --> J{查询类型}
-        J -->|文本| K[文本分析]
-        J -->|图片| L[图片分析]
-        K --> M[语义搜索]
-        L --> N[相似度搜索]
-        M --> O[结果合并]
-        N --> O
-        O --> P[排序输出]
+    subgraph "检索查询流程"
+        J[用户查询] --> K{查询模式}
+        K -->|文本查询| L[文本Embedding]
+        K -->|图像查询| M[图像Embedding]
+        L --> N[向量相似性搜索]
+        M --> N
+        N --> O[候选结果获取]
+        O --> P[结果重排序]
+        P --> Q[最终结果返回]
     end
 
-    style B fill:#e8f5e8
-    style L fill:#e8f5e8
-    style H fill:#fff3e0
-    style M fill:#fff3e0
+    subgraph "多模态处理"
+        D --> R[图像特征提取]
+        D --> S[人脸检测]
+        R --> F
+        S --> F
+    end
+
+    style D fill:#e8f5e8
+    style F fill:#fff3e0
+    style G fill:#fff3e0
+    style N fill:#fff3e0
 ```
 
 ## 核心模块设计
@@ -291,6 +323,7 @@ rag_image_system/
 
 #### 1. 核心客户端 (QwenClient) ✅
 - **API封装**：完整的Qwen VL API集成
+- **Embedding支持**：文本和图像embedding向量化
 - **错误处理**：分层错误处理机制
 - **重试机制**：指数退避重试策略
 - **日志系统**：详细的请求/响应日志
@@ -301,54 +334,75 @@ rag_image_system/
 - **元数据生成**：结构化图像信息提取
 - **批量处理**：支持批量图像处理
 
-#### 3. 向量存储 (FaissStore) ✅
+#### 3. Embedding处理器 (EmbeddingProcessor) ✅
+- **文本向量化**：支持文本内容embedding
+- **图像向量化**：支持图像内容embedding
+- **批量处理**：并行处理大规模数据集
+- **配置管理**：灵活的处理参数配置
+- **性能优化**：线程池并发处理
+
+#### 4. 向量存储 (FaissStore) ✅
 - **多索引支持**：Flat、IVF等索引类型
 - **CRUD操作**：完整的增删改查功能
 - **持久化**：索引文件保存和加载
 - **ID映射**：双向ID映射管理
 
-#### 4. 工具模块 ✅
+#### 5. 数据处理管道 (Pipelines) ✅
+- **索引管道**：完整的数据索引构建流程
+- **检索管道**：多模态查询和相似性搜索
+- **批量处理**：支持大规模数据集处理
+- **并发执行**：多线程提升处理效率
+- **容错机制**：robust的错误处理和恢复
+
+#### 6. 工具模块 ✅
 - **图像工具**：格式转换、裁剪、EXIF处理
 - **重试工具**：智能重试装饰器
 - **日志工具**：结构化日志管理
 - **配置管理**：YAML配置支持
 
-#### 5. 测试体系 ✅
+#### 7. 测试体系 ✅
 - **单元测试**：85%+ 覆盖率
 - **集成测试**：端到端流程验证
 - **真实API测试**：实际API环境测试
-- **Mock测试**：离线测试支持
+- **Pipeline测试**：完整工作流验证
 
 ### 功能特性
 
 #### ✅ 已实现
 - 图像内容分析和分类
 - 人脸检测和区域定位
+- 向量化embedding (文本+图像)
+- 语义相似性搜索
+- 多模态查询支持
+- 批量数据处理管道
 - 向量存储和索引管理
 - 配置化的重试机制
 - 完善的错误处理
 - 详细的日志记录
-- 命令行工具接口
+- 端到端工作流
 
 #### 🚧 部分实现
-- 基础的文本搜索（关键词匹配）
-- 简单的图像相似度比较
-- 元数据持久化存储
+- 查询结果重排序优化
+- 高级搜索过滤器
+- 性能监控和指标收集
 
 #### ❌ 待实现
-- 真正的向量化embedding
-- 高级的语义搜索
-- 人脸向量比对
-- 结果重排序(rerank)
-- 性能优化和缓存
+- 人脸向量精确比对
+- 实时索引更新
+- 分布式处理支持
+- Web API接口
+- 图形化用户界面
 
 ### 技术亮点
 
-1. **企业级错误处理**：分层错误分类，智能重试策略
-2. **高质量代码**：TDD开发，85%+测试覆盖率
-3. **模块化架构**：高内聚低耦合，易于扩展
-4. **配置驱动**：支持YAML配置和环境变量
-5. **生产就绪**：完善的日志、监控、错误处理
+1. **端到端工作流**：完整的从数据索引到检索的处理管道
+2. **多模态支持**：同时支持文本和图像的embedding和检索
+3. **企业级架构**：分层错误处理，智能重试策略
+4. **高质量代码**：TDD开发，85%+测试覆盖率
+5. **模块化设计**：高内聚低耦合，易于扩展
+6. **配置驱动**：支持YAML配置和环境变量
+7. **生产就绪**：完善的日志、监控、错误处理
+8. **性能优化**：并发处理、批量操作、内存管理
 
 ## 开发流程
 

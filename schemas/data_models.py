@@ -2,7 +2,7 @@
 核心数据模型定义
 """
 from dataclasses import dataclass, field
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -30,6 +30,7 @@ class ImageMetadata:
     error_message: str = ""  # 错误信息
     retry_count: int = 0  # 重试次数
     last_processed: Optional[datetime] = None  # 最后处理时间
+    face_processing_info: Optional[Dict[str, Any]] = None  # 人脸处理信息
     
     def to_dict(self) -> dict:
         """转换为字典"""
@@ -45,7 +46,8 @@ class ImageMetadata:
             "processing_status": self.processing_status.value,
             "error_message": self.error_message,
             "retry_count": self.retry_count,
-            "last_processed": self.last_processed.isoformat() if self.last_processed else None
+            "last_processed": self.last_processed.isoformat() if self.last_processed else None,
+            "face_processing_info": self.face_processing_info
         }
     
     @classmethod
@@ -62,7 +64,8 @@ class ImageMetadata:
             unique_id=data.get("unique_id", ""),
             processing_status=ProcessingStatus(data.get("processing_status", "pending")),
             error_message=data.get("error_message", ""),
-            retry_count=data.get("retry_count", 0)
+            retry_count=data.get("retry_count", 0),
+            face_processing_info=data.get("face_processing_info")
         )
         
         if data.get("last_processed"):
