@@ -11,8 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from processors.embedding_processor import EmbeddingProcessor
 from processors.image_processor import ImageProcessor
 from schemas.data_models import ProcessingStatus
-from utils.image_utils import get_supported_image_extensions
+from utils.image_utils import crop_face_from_image, get_supported_image_extensions
 from utils.logger import logger
+from utils.structured_cache import get_global_cache
+from utils.uuid_manager import generate_content_uuid
+from vector_store.uuid_faiss_store import UUIDFaissStore
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,12 @@ class IndexingPipeline:
         """
         self.image_processor = image_processor or ImageProcessor()
         self.embedding_processor = embedding_processor or EmbeddingProcessor()
+
+        # 确保EmbeddingProcessor使用UUID向量存储
+        if not hasattr(self.embedding_processor, "uuid_vector_store"):
+            from vector_store.uuid_faiss_store import UUIDFaissStore
+
+            self.embedding_processor.uuid_vector_store = UUIDFaissStore()
 
         # 人脸处理器将在需要时延迟初始化
         self._face_processor = None
@@ -110,6 +119,7 @@ class IndexingPipeline:
     ) -> Tuple[bool, Dict[str, Any]]:
         """
         完整处理单张图片：分析 + 向量化 + 存储
+        新逻辑：生成UUID -> Qwen分析 -> DiskCache存储 -> 描述文本embedding + 人脸embedding
 
         Args:
             image_path: 图片路径
@@ -120,69 +130,146 @@ class IndexingPipeline:
         try:
             logger.debug(f"开始处理图片: {image_path}")
 
-            # Step 1: 图片分析
+            # Step 1: 生成内容UUID
+            content_uuid = generate_content_uuid(image_path)
+            logger.debug(f"生成内容UUID: {content_uuid}")
+
+            # Step 2: Qwen图片分析
+            # 图片分析结果的数据结构
+            # metadata = {
+            #   unique_id: str,                # 图片唯一标识
+            #   description: str,              # 图片描述文本
+            #   is_snap: bool,                 # 是否为快照
+            #   is_landscape: bool,            # 是否为风景照
+            #   has_person: bool,              # 是否包含人物
+            #   face_rects: List[List[int]],   # 人脸框坐标列表 [[x1,y1,x2,y2],...]
+            #   timestamp: str,                # 处理时间戳
+            #   processing_status: ProcessingStatus,  # 处理状态
+            #   error_message: Optional[str]    # 错误信息
+            # }
             metadata = self.image_processor.process_image(image_path)
 
             if metadata.processing_status != ProcessingStatus.SUCCESS:
-                logger.warning(f"图片分析失败，跳过向量化: {image_path}")
+                logger.warning(f"图片分析失败，跳过后续处理: {image_path}")
                 return False, {
                     "image_path": image_path,
+                    "content_uuid": content_uuid,
                     "status": "failed",
                     "error": metadata.error_message,
                     "stage": "image_analysis",
                 }
 
-            # Step 2: 生成图片的base64编码用于向量化
-            from utils.image_utils import image_to_base64
+            # Step 3: 存储结构化数据到DiskCache
+            cache_data = {
+                "uuid": content_uuid,
+                "image_path": image_path,
+                "qwen_analysis": {
+                    "description": metadata.description,
+                    "is_snap": metadata.is_snap,
+                    "is_landscape": metadata.is_landscape,
+                    "has_person": metadata.has_person,
+                    "face_rects": metadata.face_rects,
+                    "timestamp": metadata.timestamp,
+                },
+                "processing_timestamp": datetime.now().isoformat(),
+                "embedding_status": {
+                    "description_embedded": False,
+                    "faces_embedded": False,
+                    "face_count": len(metadata.face_rects)
+                    if metadata.face_rects
+                    else 0,
+                },
+            }
 
-            try:
-                image_base64 = image_to_base64(image_path, max_size=(1024, 1024))
-            except Exception as e:
-                logger.error(f"生成base64失败: {image_path}, 错误: {e}")
-                return False, {
-                    "image_path": image_path,
-                    "status": "failed",
-                    "error": str(e),
-                    "stage": "base64_generation",
-                }
+            structured_cache = get_global_cache()
+            cache_success = structured_cache.store_analysis_result(
+                content_uuid, cache_data
+            )
+            if not cache_success:
+                logger.warning(f"DiskCache存储失败: {image_path}")
 
-            # Step 3: 向量化处理
+            # Step 4: 新的Embedding处理逻辑
             embedding_results = []
 
-            # 处理整张图片
-            image_id = metadata.unique_id
-            full_image_success = self.embedding_processor.process_image_base64(
-                image_base64, f"{image_id}_full"
-            )
-            embedding_results.append(("full_image", full_image_success))
-
-            # 处理描述文本
+            # 4.1 处理描述文本embedding (替代原来的整图embedding)
             if metadata.description:
-                text_success = self.embedding_processor.process_text(
-                    metadata.description, f"{image_id}_desc"
-                )
-                embedding_results.append(("description", text_success))
+                try:
+                    # 只使用UUID向量存储
+                    embedding = self.embedding_processor.qwen_client.get_text_embedding(
+                        metadata.description
+                    )
+                    if embedding is not None:
+                        # 添加到UUID向量存储
+                        self.embedding_processor.uuid_vector_store.add_vector_with_uuid(
+                            vector=embedding,
+                            content_uuid=content_uuid,
+                            content_type="description",
+                            metadata={
+                                "source_image_path": image_path,
+                                "description_text": metadata.description,
+                            },
+                        )
+                        embedding_results.append(("description", True))
+                        cache_data["embedding_status"]["description_embedded"] = True
+                    else:
+                        embedding_results.append(("description", False))
+                except Exception as e:
+                    logger.error(f"描述文本embedding失败: {image_path}, 错误: {e}")
+                    embedding_results.append(("description", False))
 
-            # 处理人脸区域 - 记录人脸信息但不立即处理embedding
+            # 4.2 处理人脸embedding
             if metadata.has_person and metadata.face_rects:
                 try:
-                    # 将人脸信息记录到元数据中，用于后续批量处理
+                    face_embedding_results = []
+
+                    for i, face_rect in enumerate(metadata.face_rects):
+                        try:
+                            # 裁剪人脸图片
+                            face_base64 = crop_face_from_image(image_path, face_rect)
+
+                            # 获取人脸embedding（只使用UUID向量存储）
+                            face_embedding = self.embedding_processor.qwen_client.get_image_embedding(
+                                face_base64
+                            )
+                            if face_embedding is not None:
+                                # 添加到UUID向量存储
+                                self.embedding_processor.uuid_vector_store.add_vector_with_uuid(
+                                    vector=face_embedding,
+                                    content_uuid=content_uuid,
+                                    content_type="face",
+                                    metadata={
+                                        "source_image_path": image_path,
+                                        "face_index": i,
+                                        "face_rect": face_rect,
+                                    },
+                                )
+                                face_embedding_results.append(True)
+                            else:
+                                face_embedding_results.append(False)
+
+                        except Exception as e:
+                            logger.error(f"处理人脸{i}失败: {image_path}, 错误: {e}")
+                            face_embedding_results.append(False)
+
+                    # 记录人脸处理结果
+                    faces_success = all(face_embedding_results)
+                    embedding_results.append(("faces", faces_success))
+                    cache_data["embedding_status"]["faces_embedded"] = faces_success
+
+                    # 保存人脸处理信息到metadata对象（向后兼容）
                     face_info = {
                         "face_count": len(metadata.face_rects),
                         "face_rects": metadata.face_rects,
-                        "processed": False,
+                        "processed": faces_success,
                     }
-
-                    # 添加人脸处理标记到元数据
-                    if not hasattr(metadata, "face_processing_info"):
-                        metadata.face_processing_info = face_info
-
-                    logger.debug(f"记录{len(metadata.face_rects)}个人脸信息: {image_path}")
-                    embedding_results.append(("faces", True))
+                    metadata.face_processing_info = face_info
 
                 except Exception as e:
-                    logger.warning(f"记录人脸信息失败: {image_path}, 错误: {e}")
+                    logger.error(f"人脸处理失败: {image_path}, 错误: {e}")
                     embedding_results.append(("faces", False))
+
+            # Step 5: 更新DiskCache
+            structured_cache.store_analysis_result(content_uuid, cache_data)
 
             # 统计向量化结果
             successful_embeddings = sum(
@@ -193,6 +280,7 @@ class IndexingPipeline:
             # 构建完整的结果数据
             result_data = {
                 "image_path": image_path,
+                "content_uuid": content_uuid,
                 "unique_id": metadata.unique_id,
                 "status": "success" if successful_embeddings > 0 else "partial_failure",
                 "metadata": {
@@ -211,6 +299,7 @@ class IndexingPipeline:
                     "successful": successful_embeddings,
                     "total": total_embeddings,
                 },
+                "cache_stored": cache_success,
                 "processed_at": datetime.now().isoformat(),
             }
 
