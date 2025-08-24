@@ -12,7 +12,7 @@
 
 ```
 DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
-DeprecationWarning: builtin type SwigPyObject has no __module__ attribute  
+DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
 DeprecationWarning: builtin type swigvarlink has no __module__ attribute
 ```
 
@@ -35,7 +35,7 @@ PYTHONWARNINGS=ignore::DeprecationWarning python3 -m pytest -v
 在`pytest.ini`中已添加：
 
 ```ini
-addopts = 
+addopts =
     --disable-warnings
     # ... 其他选项
 ```

@@ -19,7 +19,7 @@ nano .env
 
 ### 2. YAML配置文件
 
-```bash  
+```bash
 # 复制YAML配置示例文件
 cp config/config.yaml.example config.yaml
 

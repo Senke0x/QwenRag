@@ -328,7 +328,7 @@ def text_search():
     results = retrieval.search_by_text(query, top_k=10)
     return jsonify(results)
 
-@app.route('/search/image', methods=['POST'])  
+@app.route('/search/image', methods=['POST'])
 def image_search():
     image_data = request.files['image'].read()
     results = retrieval.search_by_image(image_data, top_k=10)
@@ -344,12 +344,12 @@ from pipelines.indexing_pipeline import IndexingPipeline
 def batch_process(directory):
     pipeline = IndexingPipeline(batch_size=50, max_workers=10)
     results = pipeline.build_index_from_directory(directory)
-    
+
     print(f"批处理完成:")
     print(f"- 总计: {results['total']}")
     print(f"- 成功: {results['success']}")
     print(f"- 失败: {results['failed']}")
-    
+
     return results['success'] > 0
 
 if __name__ == "__main__":

@@ -21,16 +21,16 @@ Your workflow:
 2. **Stage Changes**: If changes aren't already staged, use `git add` to stage the appropriate files. Be selective and avoid staging unintended files.
 
 3. **Generate Conventional Commit Message**: Create a commit message following Conventional Commits specification (https://www.conventionalcommits.org/):
-   
+
    **Format Structure** (Maximum 5 lines total):
    ```
    <type>[optional scope]: <description>
-   
+
    [optional body line 1]
-   [optional body line 2] 
+   [optional body line 2]
    [optional footer]
    ```
-   
+
    **Type Classifications**:
    - `feat:` - New feature implementation
    - `fix:` - Bug fixes and patches
@@ -42,10 +42,10 @@ Your workflow:
    - `style:` - Code formatting, whitespace changes
    - `ci:` - CI/CD configuration changes
    - `build:` - Build system changes
-   
+
    **Message Guidelines**:
    - **Line 1**: `<type>[scope]: <description>` (50 chars max, imperative mood)
-   - **Line 2**: Empty line (if body exists)  
+   - **Line 2**: Empty line (if body exists)
    - **Lines 3-4**: Optional body for detailed explanation (when needed)
    - **Line 5**: Optional footer for breaking changes or issue references
    - Use `!` after type/scope for breaking changes (e.g., `feat!:`)

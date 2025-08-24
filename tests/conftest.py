@@ -1,21 +1,28 @@
 """
 pytest配置文件
 """
-import warnings
-import pytest
 import os
-import tempfile
 import shutil
+import tempfile
+import warnings
 from pathlib import Path
 from unittest.mock import Mock, patch
-from PIL import Image, ImageDraw
+
 import numpy as np
+import pytest
 from dotenv import load_dotenv
+from PIL import Image, ImageDraw
 
 # 过滤SWIG相关的warnings
-warnings.filterwarnings("ignore", message="builtin type SwigPyPacked has no __module__ attribute")
-warnings.filterwarnings("ignore", message="builtin type SwigPyObject has no __module__ attribute") 
-warnings.filterwarnings("ignore", message="builtin type swigvarlink has no __module__ attribute")
+warnings.filterwarnings(
+    "ignore", message="builtin type SwigPyPacked has no __module__ attribute"
+)
+warnings.filterwarnings(
+    "ignore", message="builtin type SwigPyObject has no __module__ attribute"
+)
+warnings.filterwarnings(
+    "ignore", message="builtin type swigvarlink has no __module__ attribute"
+)
 
 # 加载环境变量
 load_dotenv()
@@ -72,6 +79,7 @@ def sample_images_dir():
 def sample_image_metadata():
     """示例图片元数据"""
     from schemas.data_models import ImageMetadata, ProcessingStatus
+
     return ImageMetadata(
         path="/test/path/image.jpg",
         is_snap=False,
@@ -80,7 +88,7 @@ def sample_image_metadata():
         has_person=False,
         face_rects=[],
         unique_id="test_id_123",
-        processing_status=ProcessingStatus.SUCCESS
+        processing_status=ProcessingStatus.SUCCESS,
     )
 
 
@@ -88,6 +96,7 @@ def sample_image_metadata():
 def sample_face_metadata():
     """包含人脸的示例图片元数据"""
     from schemas.data_models import ImageMetadata, ProcessingStatus
+
     return ImageMetadata(
         path="/test/path/face.jpg",
         is_snap=False,
@@ -96,7 +105,7 @@ def sample_face_metadata():
         has_person=True,
         face_rects=[(50, 80, 100, 100)],
         unique_id="face_id_456",
-        processing_status=ProcessingStatus.SUCCESS
+        processing_status=ProcessingStatus.SUCCESS,
     )
 
 
@@ -105,10 +114,10 @@ def image_processor(api_key, use_real_api):
     """创建图片处理器实例"""
     if use_real_api and api_key:
         # 使用真实API
-        from processors.image_processor import ImageProcessor
         from clients.qwen_client import QwenClient
         from config import QwenVLConfig
-        
+        from processors.image_processor import ImageProcessor
+
         config = QwenVLConfig(api_key=api_key)
         qwen_client = QwenClient(qwen_config=config)
         return ImageProcessor(qwen_client=qwen_client)
@@ -121,6 +130,7 @@ def image_processor(api_key, use_real_api):
 def faiss_store():
     """创建FAISS存储实例"""
     from vector_store.faiss_store import FaissStore
+
     return FaissStore(dimension=768)
 
 
@@ -143,7 +153,7 @@ def sample_vectors():
     return np.random.rand(10, 768).astype(np.float32)
 
 
-@pytest.fixture  
+@pytest.fixture
 def sample_ids():
     """生成示例ID列表"""
     return [f"img_id_{i}" for i in range(10)]
@@ -156,7 +166,7 @@ def qwen_client(api_key, use_real_api):
     if use_real_api and api_key:
         from clients.qwen_client import QwenClient
         from config import QwenVLConfig
-        
+
         config = QwenVLConfig(api_key=api_key)
         return QwenClient(qwen_config=config)
     else:
@@ -168,6 +178,7 @@ def qwen_client(api_key, use_real_api):
 def prompt_manager():
     """创建PromptManager实例"""
     from clients.prompt_manager import PromptManager
+
     return PromptManager()
 
 
@@ -175,6 +186,7 @@ def prompt_manager():
 def mock_qwen_client():
     """创建模拟的QwenClient"""
     from unittest.mock import Mock
+
     mock_client = Mock()
     mock_client.chat_with_image.return_value = '{"test": "mock_response"}'
     mock_client.chat_with_text.return_value = "Mock text response"
@@ -183,7 +195,7 @@ def mock_qwen_client():
         "base_url": "mock-url",
         "max_tokens": 1024,
         "temperature": 0.1,
-        "timeout": 60
+        "timeout": 60,
     }
     return mock_client
 
@@ -192,10 +204,11 @@ def mock_qwen_client():
 def test_config():
     """创建测试用的配置"""
     from config import QwenVLConfig
+
     return QwenVLConfig(
         api_key="test_api_key",
         model="test-model",
         temperature=0.5,
         max_tokens=512,
-        timeout=30
+        timeout=30,
     )

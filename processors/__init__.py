@@ -2,10 +2,7 @@
 图片处理器模块
 """
 
-from .image_processor import ImageProcessor
 from .embedding_processor import EmbeddingProcessor
+from .image_processor import ImageProcessor
 
-__all__ = [
-    "ImageProcessor",
-    "EmbeddingProcessor"
-]
+__all__ = ["ImageProcessor", "EmbeddingProcessor"]

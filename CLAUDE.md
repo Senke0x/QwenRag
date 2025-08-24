@@ -11,7 +11,7 @@
 ```
 QwenRag/
 ├── docs/              # 📚 所有文档文件 (包括Claude生成的总结)
-├── scripts/           # 🔧 测试和工具脚本  
+├── scripts/           # 🔧 测试和工具脚本
 ├── config/            # ⚙️ 配置文件和示例
 ├── clients/           # 🌐 API客户端 (QwenClient, PromptManager)
 ├── processors/        # 🔄 业务处理逻辑 (ImageProcessor)
@@ -48,7 +48,7 @@ QwenRag/
 # 运行单元测试
 pytest tests/unit/ -m unit
 
-# 运行集成测试  
+# 运行集成测试
 pytest tests/integration/ -m integration
 
 # 运行真实API测试

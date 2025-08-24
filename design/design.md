@@ -66,19 +66,19 @@ graph TB
     DEMO --> RET_PIPE
     API --> IDX_PIPE
     API --> RET_PIPE
-    
+
     IDX_PIPE --> IP
     IDX_PIPE --> EP
     RET_PIPE --> EP
     RET_PIPE --> FS
-    
+
     IP --> QC
     IP --> PM
     EP --> QC
     QC --> FS
     FS --> FAISS_IDX
     IDX_PIPE --> META
-    
+
     IP --> IU
     QC --> RU
     IDX_PIPE --> LOG

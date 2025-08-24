@@ -14,7 +14,7 @@
 
 ### 缺失功能
 - ❌ **人脸向量化**: 缺乏专用的人脸embedding提取
-- ❌ **人脸相似度比对**: 没有人脸特征匹配算法  
+- ❌ **人脸相似度比对**: 没有人脸特征匹配算法
 - ❌ **Web API服务**: 仅有CLI工具，缺乏HTTP接口
 - ❌ **人脸索引管理**: 缺乏专门的人脸向量存储
 
@@ -26,18 +26,18 @@
 graph TB
     subgraph "人脸处理增强模块"
         FD[人脸检测<br/>Face Detection]
-        FE[人脸提取<br/>Face Extraction] 
+        FE[人脸提取<br/>Face Extraction]
         FEMB[人脸向量化<br/>Face Embedding]
         FS[人脸存储<br/>Face Storage]
         FM[人脸匹配<br/>Face Matching]
     end
-    
+
     subgraph "现有模块"
         IP[ImageProcessor]
-        QC[QwenClient] 
+        QC[QwenClient]
         VS[FaissStore]
     end
-    
+
     IP --> FD
     FD --> FE
     FE --> FEMB
@@ -45,7 +45,7 @@ graph TB
     FEMB --> FS
     FS --> VS
     FM --> VS
-    
+
     style FEMB fill:#e3f2fd
     style FM fill:#e3f2fd
 ```
@@ -58,56 +58,56 @@ graph TB
 ```python
 class FaceProcessor:
     """专门的人脸处理器"""
-    
+
     def __init__(self, qwen_client: QwenClient, config: FaceProcessorConfig):
         self.qwen_client = qwen_client
         self.config = config
         self.face_store = FaceFaissStore(config.face_index_config)
-    
+
     async def extract_face_embeddings(
-        self, 
-        image_path: str, 
+        self,
+        image_path: str,
         face_rects: List[Tuple[int, int, int, int]]
     ) -> List[np.ndarray]:
         """提取人脸embedding向量"""
-        
+
     async def find_similar_faces(
-        self, 
-        query_embedding: np.ndarray, 
-        top_k: int = 10, 
+        self,
+        query_embedding: np.ndarray,
+        top_k: int = 10,
         similarity_threshold: float = 0.8
     ) -> List[FaceSearchResult]:
         """人脸相似度搜索"""
-        
+
     def calculate_face_similarity(
-        self, 
-        embedding1: np.ndarray, 
+        self,
+        embedding1: np.ndarray,
         embedding2: np.ndarray
     ) -> float:
         """计算人脸相似度"""
 ```
 
-#### 1.2.2 人脸向量存储 (FaceFaissStore)  
+#### 1.2.2 人脸向量存储 (FaceFaissStore)
 **文件位置**: `vector_store/face_faiss_store.py`
 
 ```python
 class FaceFaissStore(FaissStore):
     """专门的人脸向量存储"""
-    
+
     def __init__(self, config: FaceIndexConfig):
         super().__init__(config)
         self.face_metadata: Dict[int, FaceMetadata] = {}
-    
+
     def add_face_embedding(
-        self, 
-        embedding: np.ndarray, 
+        self,
+        embedding: np.ndarray,
         face_metadata: FaceMetadata
     ) -> int:
         """添加人脸embedding"""
-        
+
     def search_similar_faces(
-        self, 
-        query_embedding: np.ndarray, 
+        self,
+        query_embedding: np.ndarray,
         k: int = 10
     ) -> List[Tuple[int, float, FaceMetadata]]:
         """搜索相似人脸"""
@@ -127,7 +127,7 @@ class FaceMetadata:
     face_embedding: np.ndarray      # 人脸向量
     confidence_score: float         # 检测置信度
     created_at: datetime           # 创建时间
-    
+
 @dataclass
 class FaceSearchResult:
     """人脸搜索结果"""
@@ -170,7 +170,7 @@ async def process_image_with_faces(self, image_path: str, metadata: ImageMetadat
         face_embeddings = await self.face_processor.extract_face_embeddings(
             image_path, metadata.face_rects
         )
-        
+
         # 存储人脸向量
         for i, (face_rect, embedding) in enumerate(zip(metadata.face_rects, face_embeddings)):
             face_metadata = FaceMetadata(
@@ -189,19 +189,19 @@ async def process_image_with_faces(self, image_path: str, metadata: ImageMetadat
 async def search_by_face(self, query_image_path: str) -> List[FaceSearchResult]:
     # 检测查询图片中的人脸
     query_metadata = await self.image_processor.analyze_image(query_image_path)
-    
+
     if query_metadata.has_person and query_metadata.face_rects:
         # 提取查询人脸的embedding
         query_embeddings = await self.face_processor.extract_face_embeddings(
             query_image_path, query_metadata.face_rects
         )
-        
+
         # 搜索相似人脸
         all_results = []
         for embedding in query_embeddings:
             results = await self.face_processor.find_similar_faces(embedding)
             all_results.extend(results)
-        
+
         return sorted(all_results, key=lambda x: x.similarity_score, reverse=True)
 ```
 
@@ -214,7 +214,7 @@ async def search_by_face(self, query_image_path: str) -> List[FaceSearchResult]:
 - **异步支持**: 完美适配现有异步处理流程
 - **依赖注入**: 便于集成现有服务组件
 
-#### 部署方案: 
+#### 部署方案:
 - **开发环境**: Uvicorn
 - **生产环境**: Gunicorn + Uvicorn workers
 - **容器化**: Docker支持
@@ -225,24 +225,24 @@ async def search_by_face(self, query_image_path: str) -> List[FaceSearchResult]:
 graph TB
     subgraph "Web API 层"
         AUTH[认证中间件]
-        RATE[限流中间件] 
+        RATE[限流中间件]
         VALID[参数验证]
         ROUTER[路由处理]
     end
-    
+
     subgraph "业务服务层"
         INDEX_SVC[索引服务<br/>IndexingService]
-        SEARCH_SVC[搜索服务<br/>SearchService] 
+        SEARCH_SVC[搜索服务<br/>SearchService]
         FACE_SVC[人脸服务<br/>FaceService]
         FILE_SVC[文件服务<br/>FileService]
     end
-    
+
     subgraph "现有核心模块"
         PIPELINE[Pipelines]
         PROCESSOR[Processors]
         STORE[Vector Store]
     end
-    
+
     AUTH --> RATE
     RATE --> VALID
     VALID --> ROUTER
@@ -250,12 +250,12 @@ graph TB
     ROUTER --> SEARCH_SVC
     ROUTER --> FACE_SVC
     ROUTER --> FILE_SVC
-    
+
     INDEX_SVC --> PIPELINE
     SEARCH_SVC --> PIPELINE
     FACE_SVC --> PROCESSOR
     FILE_SVC --> STORE
-    
+
     style INDEX_SVC fill:#e8f5e8
     style SEARCH_SVC fill:#e8f5e8
     style FACE_SVC fill:#e3f2fd
@@ -273,7 +273,7 @@ api/
 ├── routers/            # 路由模块
 │   ├── __init__.py
 │   ├── indexing.py     # 索引管理API
-│   ├── search.py       # 搜索API  
+│   ├── search.py       # 搜索API
 │   ├── faces.py        # 人脸识别API
 │   └── files.py        # 文件管理API
 ├── services/           # 业务服务
@@ -301,13 +301,13 @@ async def build_index(
 ):
     """构建图片索引"""
 
-# GET /api/v1/index/status  
+# GET /api/v1/index/status
 @router.get("/status", response_model=IndexStatusResponse)
 async def get_index_status():
     """获取索引状态"""
 
 # POST /api/v1/index/add
-@router.post("/add", response_model=AddImagesResponse)  
+@router.post("/add", response_model=AddImagesResponse)
 async def add_images(
     request: AddImagesRequest,
     indexing_service: IndexingService = Depends()
@@ -325,7 +325,7 @@ async def search_by_text(
 ):
     """文本搜索图片"""
 
-# POST /api/v1/search/image  
+# POST /api/v1/search/image
 @router.post("/image", response_model=ImageSearchResponse)
 async def search_by_image(
     file: UploadFile,
@@ -335,7 +335,7 @@ async def search_by_image(
     """以图搜图"""
 
 # POST /api/v1/search/face
-@router.post("/face", response_model=FaceSearchResponse) 
+@router.post("/face", response_model=FaceSearchResponse)
 async def search_by_face(
     file: UploadFile,
     face_service: FaceService = Depends()
@@ -357,7 +357,7 @@ async def detect_faces(
 @router.post("/compare", response_model=FaceComparisonResponse)
 async def compare_faces(
     request: FaceComparisonRequest,
-    face_service: FaceService = Depends()  
+    face_service: FaceService = Depends()
 ):
     """比较两张人脸的相似度"""
 
@@ -386,21 +386,21 @@ class ImageSearchParams(BaseModel):
     include_metadata: bool = Field(True)
 
 class FaceComparisonRequest(BaseModel):
-    face_id_1: str = Field(..., description="第一个人脸ID") 
+    face_id_1: str = Field(..., description="第一个人脸ID")
     face_id_2: str = Field(..., description="第二个人脸ID")
 
-# models/responses.py  
+# models/responses.py
 class SearchResultItem(BaseModel):
     image_id: str
-    image_path: str  
+    image_path: str
     similarity_score: float
     metadata: Dict[str, Any]
-    
+
 class TextSearchResponse(BaseModel):
     results: List[SearchResultItem]
     total: int
     query_time_ms: float
-    
+
 class FaceDetectionResponse(BaseModel):
     faces: List[DetectedFace]
     face_count: int
@@ -419,15 +419,15 @@ class DetectedFace(BaseModel):
 ```python
 class SearchService:
     """搜索业务服务"""
-    
+
     def __init__(self, retrieval_pipeline: RetrievalPipeline):
         self.pipeline = retrieval_pipeline
-    
+
     async def search_by_text(self, query: str, limit: int = 10) -> List[SearchResultItem]:
         """文本搜索实现"""
         results = await self.pipeline.search_by_text(query, top_k=limit)
         return [self._convert_to_api_result(r) for r in results]
-    
+
     async def search_by_image(self, image_data: bytes, limit: int = 10) -> List[SearchResultItem]:
         """图像搜索实现"""
         # 保存临时图片文件
@@ -436,28 +436,28 @@ class SearchService:
         return [self._convert_to_api_result(r) for r in results]
 ```
 
-#### 2.4.2 人脸服务  
+#### 2.4.2 人脸服务
 ```python
 class FaceService:
     """人脸识别业务服务"""
-    
+
     def __init__(self, face_processor: FaceProcessor):
         self.face_processor = face_processor
-    
+
     async def detect_faces(self, image_data: bytes) -> FaceDetectionResponse:
         """人脸检测服务"""
         temp_path = await self._save_temp_image(image_data)
-        
+
         # 使用现有的图像处理器检测人脸
         metadata = await self.image_processor.analyze_image(temp_path)
-        
+
         faces = []
         if metadata.has_person and metadata.face_rects:
             # 提取人脸embeddings
             embeddings = await self.face_processor.extract_face_embeddings(
                 temp_path, metadata.face_rects
             )
-            
+
             for i, (rect, embedding) in enumerate(zip(metadata.face_rects, embeddings)):
                 faces.append(DetectedFace(
                     face_id=f"temp_{uuid.uuid4()}",
@@ -465,7 +465,7 @@ class FaceService:
                     confidence=0.9,  # TODO: 从检测结果获取真实置信度
                     embedding_vector=embedding.tolist()
                 ))
-        
+
         return FaceDetectionResponse(
             faces=faces,
             face_count=len(faces),
@@ -490,7 +490,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc"
     )
-    
+
     # 中间件配置
     app.add_middleware(
         CORSMiddleware,
@@ -499,12 +499,12 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    
+
     # 注册路由
     app.include_router(indexing_router, prefix="/api/v1/index", tags=["索引管理"])
     app.include_router(search_router, prefix="/api/v1/search", tags=["搜索"])
     app.include_router(faces_router, prefix="/api/v1/faces", tags=["人脸识别"])
-    
+
     return app
 
 app = create_app()
@@ -536,7 +536,7 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 - [ ] **Day 3-4**: 实现人脸embedding提取 (基于Qwen模型)
 - [ ] **Day 5-7**: 开发人脸相似度匹配算法
 
-#### Week 2: 集成和测试  
+#### Week 2: 集成和测试
 - [ ] **Day 1-3**: 集成到IndexingPipeline和RetrievalPipeline
 - [ ] **Day 4-5**: 编写单元测试和集成测试
 - [ ] **Day 6-7**: 真实API测试和性能优化
@@ -550,7 +550,7 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 
 #### Week 2: 完善和部署
 - [ ] **Day 1-2**: 实现索引管理API
-- [ ] **Day 3-4**: API测试和文档完善  
+- [ ] **Day 3-4**: API测试和文档完善
 - [ ] **Day 5-7**: Docker化和部署配置
 
 ### Phase 3: 功能集成和优化 (1周)
@@ -578,11 +578,11 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 
 ### 风险1: 人脸embedding质量
 **问题**: Qwen模型的人脸embedding可能不如专业人脸识别模型
-**缓解方案**: 
+**缓解方案**:
 - 对比测试多种embedding方法
 - 准备Plan B: 集成开源人脸识别模型
 
-### 风险2: API性能瓶颈  
+### 风险2: API性能瓶颈
 **问题**: 图像处理和向量搜索可能造成API响应慢
 **缓解方案**:
 - 实现异步处理队列
@@ -593,7 +593,7 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--worker
 **问题**: 人脸向量和图像数据占用大量存储空间
 **缓解方案**:
 - 实现向量压缩算法
-- 图片存储分层策略  
+- 图片存储分层策略
 - 定期清理临时文件
 
 ## 📚 依赖和资源需求
@@ -608,7 +608,7 @@ aiofiles>=23.2.1
 pillow>=10.0.0
 
 # 可选: 专业人脸识别
-# insightface>=0.7.3  
+# insightface>=0.7.3
 # onnxruntime>=1.16.0
 ```
 
@@ -620,7 +620,7 @@ pillow>=10.0.0
 ## 🔄 后续扩展计划
 
 1. **实时人脸识别**: WebSocket支持实时视频流人脸检测
-2. **人脸聚类功能**: 自动将相似人脸进行分组聚类  
+2. **人脸聚类功能**: 自动将相似人脸进行分组聚类
 3. **多人脸场景**: 支持一张图片多个人脸的精确匹配
 4. **移动端适配**: 提供移动端优化的轻量化API
 5. **联邦学习**: 支持分布式人脸模型训练

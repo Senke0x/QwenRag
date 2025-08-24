@@ -6,9 +6,9 @@
 
 - **图像智能分析**: 使用Qwen VL识别图片内容、分类、人脸检测
 - **向量存储**: 基于FAISS的高效向量存储和搜索
-- **多种搜索方式**: 
+- **多种搜索方式**:
   - 文字描述搜图
-  - 以图搜图  
+  - 以图搜图
   - 人脸相似度搜索
 - **完善的错误处理**: 重试机制、错误恢复、状态跟踪
 - **测试驱动开发**: 高覆盖率测试，支持真实API和模拟测试
@@ -95,25 +95,25 @@ QwenRag/
 ├── main_search.py        # 图片搜索工具
 ├── config.py             # 配置管理
 ├── requirements.txt      # 依赖包
-├── 
+├──
 ├── schemas/              # 数据模型
 │   ├── __init__.py
 │   └── data_models.py
-├── 
+├──
 ├── processors/           # 图片处理器
 │   ├── __init__.py
 │   └── image_processor.py
-├── 
+├──
 ├── vector_store/         # 向量存储
 │   ├── __init__.py
 │   └── faiss_store.py
-├── 
+├──
 ├── utils/                # 工具函数
 │   ├── __init__.py
 │   ├── logger.py
 │   ├── retry_utils.py
 │   └── image_utils.py
-├── 
+├──
 └── tests/                # 测试用例
     ├── conftest.py
     └── unit/

@@ -165,7 +165,7 @@ python test_api_demo.py
 
 此脚本会测试所有主要API功能：
 - ✅ API健康检查
-- ✅ 搜索服务健康检查  
+- ✅ 搜索服务健康检查
 - ✅ 人脸识别服务健康检查
 - ✅ 索引状态查询
 - ✅ 文本搜索
@@ -297,7 +297,7 @@ upstream qwenrag_api {
 server {
     listen 80;
     server_name your-domain.com;
-    
+
     location / {
         proxy_pass http://qwenrag_api;
         proxy_set_header Host $host;

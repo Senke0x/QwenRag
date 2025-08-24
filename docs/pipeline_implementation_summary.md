@@ -30,7 +30,7 @@ pipelines/
 - **智能目录扫描**: 递归扫描支持的图片格式
 - **并行批处理**: ThreadPoolExecutor实现高效并发处理
 - **增量索引**: 跳过已处理文件，支持断点续传
-- **多层次向量化**: 
+- **多层次向量化**:
   - 全图embedding (`{id}_full`)
   - 描述文本embedding (`{id}_desc`)
   - 人脸区域embedding (`{id}_face_{i}`)
@@ -75,7 +75,7 @@ results = pipeline.build_index_from_directory(
 # 混合搜索示例
 results = retrieval.hybrid_search(
     query_text="游戏截图",
-    query_image="example.jpg", 
+    query_image="example.jpg",
     text_weight=0.6,          # 文本权重
     image_weight=0.4,         # 图像权重
     top_k=10
@@ -117,7 +117,7 @@ results = retrieval.hybrid_search(
 tests/unit/test_pipelines.py
 ├── TestIndexingPipeline (11个测试)
 │   ├── 初始化测试
-│   ├── 目录扫描测试  
+│   ├── 目录扫描测试
 │   ├── 批处理测试
 │   ├── 并行处理测试
 │   └── 元数据保存测试
@@ -152,7 +152,7 @@ tests/unit/test_pipelines.py
 ```python
 # demo_end_to_end.py - 完整流程演示
 - 索引构建演示
-- 多种查询模式演示  
+- 多种查询模式演示
 - 统计信息展示
 - 错误处理演示
 ```
@@ -233,7 +233,7 @@ tests/unit/test_pipelines.py
 
 ---
 
-**开发时间**: 约4小时  
-**代码行数**: ~1000行 (包含测试)  
-**测试覆盖**: 21个测试用例全部通过  
+**开发时间**: 约4小时
+**代码行数**: ~1000行 (包含测试)
+**测试覆盖**: 21个测试用例全部通过
 **文档完整**: 4个文档文件，总计~3000行

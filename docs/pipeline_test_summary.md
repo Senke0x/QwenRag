@@ -26,12 +26,12 @@ PYTHONWARNINGS=ignore::DeprecationWarning
 ```
 =========================== test results ===========================
 Platform: darwin -- Python 3.9.6, pytest-8.4.1
-Total Tests: 10 
+Total Tests: 10
 Passed: 10 ✅
 Failed: 0 ❌
 Skipped: 0 ⏭️
 Execution Time: 50.70 seconds
-=========================== 
+===========================
 ```
 
 ## 详细测试报告
@@ -47,7 +47,7 @@ Execution Time: 50.70 seconds
   - QwenClient API连接成功（维度检测测试）
   - 配置参数正确设置
 
-#### ✅ `test_indexing_pipeline_scan_directory_real_api` 
+#### ✅ `test_indexing_pipeline_scan_directory_real_api`
 - **目的**: 验证目录扫描功能
 - **结果**: PASSED ✅
 - **关键验证**:
@@ -61,7 +61,7 @@ Execution Time: 50.70 seconds
 - **API调用验证**:
   - 🎯 图像分析API (`qwen-vl-max-latest`)
   - 🎯 全图embedding (`multimodal-embedding-v1`)
-  - 🎯 描述文本embedding (`text-embedding-v4`) 
+  - 🎯 描述文本embedding (`text-embedding-v4`)
   - 🎯 人脸区域embedding (多次调用)
 - **处理结果**:
   - 成功识别游戏场景和人物
@@ -138,7 +138,7 @@ Execution Time: 50.70 seconds
 
 #### API类型分布
 - 🔤 **文本Embedding**: `text-embedding-v4` (~25次)
-- 🖼️ **图像Embedding**: `multimodal-embedding-v1` (~35次)  
+- 🖼️ **图像Embedding**: `multimodal-embedding-v1` (~35次)
 - 👁️ **图像分析**: `qwen-vl-max-latest` (~15次)
 - 🔍 **维度检测**: 自动检测调用 (~5次)
 
@@ -173,7 +173,7 @@ Execution Time: 50.70 seconds
 
 #### IndexingPipeline
 - [x] 组件初始化和配置
-- [x] 目录扫描和文件过滤  
+- [x] 目录扫描和文件过滤
 - [x] 单图片完整处理流程
 - [x] 批量并行处理
 - [x] 增量处理支持
@@ -181,11 +181,11 @@ Execution Time: 50.70 seconds
 - [x] 统计信息管理
 - [x] 错误处理和恢复
 
-#### RetrievalPipeline  
+#### RetrievalPipeline
 - [x] 组件初始化和配置
 - [x] 元数据索引加载
 - [x] 文本查询功能
-- [x] 图片查询功能 
+- [x] 图片查询功能
 - [x] 结果增强和过滤
 - [x] ID解析和匹配类型识别
 - [x] 统计信息获取
@@ -266,8 +266,8 @@ RetrievalPipeline(
 
 ---
 
-**测试完成时间**: 2025-08-19  
-**测试环境**: MacOS Darwin 24.6.0, Python 3.9.6  
-**API提供商**: 阿里云DashScope  
-**测试结果**: ✅ 全部通过 (10/10)  
+**测试完成时间**: 2025-08-19
+**测试环境**: MacOS Darwin 24.6.0, Python 3.9.6
+**API提供商**: 阿里云DashScope
+**测试结果**: ✅ 全部通过 (10/10)
 **建议状态**: 🚀 生产就绪

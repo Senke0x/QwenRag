@@ -4,7 +4,7 @@
 
 根据用户需求，对QwenRag项目的embedding功能进行了全面调整，主要涉及：
 1. 更新embedding模型的使用策略
-2. 添加人脸图像裁剪和embedding功能  
+2. 添加人脸图像裁剪和embedding功能
 3. 完善JSON数据和图片数据的embedding处理
 4. 调整EmbeddingProcessor以适配新的多模态embedding需求
 
@@ -13,7 +13,7 @@
 ### 1. 模型使用策略
 
 **原计划**: 使用multimodal-embedding-v1处理所有embedding需求
-**实际调整**: 
+**实际调整**:
 - **文本embedding**: 使用`text-embedding-v4`模型 (维度: 1024)
 - **图片embedding**: 通过VL模型生成描述，再使用`text-embedding-v4`获取embedding
 - **多模态embedding**: 结合文本和图片描述，使用`text-embedding-v4`处理
@@ -68,7 +68,7 @@ def __init__(
 test_text_embedding_basic()
 test_image_embedding_basic()
 
-# 多模态embedding测试  
+# 多模态embedding测试
 test_multimodal_embedding_text_only()
 test_multimodal_embedding_image_only()
 test_multimodal_embedding_text_and_image()
@@ -161,7 +161,7 @@ results = processor.search_by_text("美丽的风景", top_k=5)
 # 文本embedding测试
 ✅ 维度=1024, 模型=text-embedding-v4
 
-# 图片embedding测试  
+# 图片embedding测试
 ✅ 维度=1024, 模型=text-embedding-v4
 
 # 多模态embedding测试
