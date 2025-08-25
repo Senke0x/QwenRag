@@ -11,7 +11,7 @@ import numpy as np
 from clients.qwen_client import QwenClient
 from config.embedding_config import EmbeddingProcessorConfig, default_embedding_config
 from utils.logger import logger
-from vector_store.faiss_store import FaissStore
+from vector_store import FaissStore
 
 logger = logging.getLogger(__name__)
 

@@ -20,7 +20,7 @@ from schemas.face_models import (
 from utils.image_utils import crop_face_from_image
 from utils.logger import setup_logger
 from utils.retry_utils import with_retry
-from vector_store.face_faiss_store import FaceFaissStore
+from vector_store import FaceFaissStore
 
 logger = setup_logger(__name__)
 

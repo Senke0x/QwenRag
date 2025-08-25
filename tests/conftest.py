@@ -129,7 +129,7 @@ def image_processor(api_key, use_real_api):
 @pytest.fixture
 def faiss_store():
     """创建FAISS存储实例"""
-    from vector_store.faiss_store import FaissStore
+    from vector_store import FaissStore
 
     return FaissStore(dimension=768)
 

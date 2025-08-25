@@ -8,6 +8,17 @@ from datetime import datetime
 import numpy as np
 import pytest
 
+# 加载环境变量
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()
+except ImportError:
+    pass
+
+# 重新定义QwenVLConfig以避免导入问题
+from dataclasses import dataclass
+
 from clients.qwen_client import (
     QwenClient,
     QwenVLAuthError,
@@ -15,8 +26,27 @@ from clients.qwen_client import (
     QwenVLRateLimitError,
     QwenVLServiceError,
 )
-from config import QwenVLConfig
+
+# 直接导入QwenVLConfig类定义
+from config import QwenVLConfig as _QwenVLConfig
 from tests.test_data import get_test_image_base64
+
+
+@dataclass
+class QwenVLConfig:
+    """Qwen VL API配置"""
+
+    api_key: str = ""
+    base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    model: str = "qwen-vl-max-latest"
+    timeout: int = 60
+    max_tokens: int = 2048
+    temperature: float = 0.1
+
+    def __post_init__(self):
+        if not self.api_key:
+            self.api_key = os.getenv("DASHSCOPE_API_KEY", "")
+
 
 pytestmark = pytest.mark.skipif(
     os.getenv("USE_REAL_API", "false").lower() != "true",

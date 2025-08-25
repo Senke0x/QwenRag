@@ -28,7 +28,7 @@ from config import QwenVLConfig
 from processors.image_processor import ImageProcessor
 from schemas.data_models import ImageMetadata, ProcessingStatus, SearchResult
 from utils.logger import setup_logger
-from vector_store.faiss_store import FaissStore
+from vector_store import FaissStore
 
 
 def setup_logging(log_level: str = "INFO"):

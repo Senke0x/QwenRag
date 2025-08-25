@@ -11,9 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 import faiss
 import numpy as np
 
+from schemas.face_models import FaceMetadata, FaceSearchResult, FaceSimilarityMethod
 from utils.logger import setup_logger
 from utils.uuid_manager import UUIDManager
-from vector_store.faiss_store import FaissStore
+
+from .faiss_store import FaissStore
 
 logger = setup_logger(__name__)
 
@@ -52,6 +54,10 @@ class UUIDFaissStore(FaissStore):
 
         # 向量ID计数器
         self.vector_id_counter = 0
+
+        # 人脸特定的元数据存储
+        self.face_metadata: Dict[int, FaceMetadata] = {}
+        self._next_face_id = 0
 
         # 尝试加载现有数据
         self._load_existing_data()
@@ -318,6 +324,7 @@ class UUIDFaissStore(FaissStore):
             "index_type": self.index_type,
             "active_metadata_entries": len(self.vector_metadata),
             "uuid_to_vector_mapping_size": len(self.uuid_to_vector_ids),
+            "face_statistics": self.get_face_statistics(),
         }
 
     def save_index(
@@ -342,12 +349,19 @@ class UUIDFaissStore(FaissStore):
             faiss.write_index(self.index, save_index_file)
 
             # 保存元数据
+            # 保存人脸元数据到独立字典
+            face_metadata_dict = {
+                str(vector_id): face_metadata.to_dict()
+                for vector_id, face_metadata in self.face_metadata.items()
+            }
+
             metadata_to_save = {
                 "vector_metadata": self.vector_metadata,
                 "uuid_to_vector_ids": self.uuid_to_vector_ids,
                 "vector_id_counter": self.vector_id_counter,
                 "dimension": self.dimension,
                 "index_type": self.index_type,
+                "face_metadata": face_metadata_dict,
                 "save_timestamp": datetime.now().isoformat(),
             }
 
@@ -395,7 +409,17 @@ class UUIDFaissStore(FaissStore):
                 self.uuid_to_vector_ids = metadata.get("uuid_to_vector_ids", {})
                 self.vector_id_counter = metadata.get("vector_id_counter", 0)
 
-                logger.info(f"元数据加载成功: {load_metadata_file}")
+                # 加载人脸元数据
+                face_metadata_dict = metadata.get("face_metadata", {})
+                self.face_metadata = {}
+                for vector_id_str, face_data in face_metadata_dict.items():
+                    vector_id = int(vector_id_str)
+                    self.face_metadata[vector_id] = FaceMetadata.from_dict(face_data)
+                    self._next_face_id = max(self._next_face_id, vector_id + 1)
+
+                logger.info(
+                    f"元数据加载成功: {load_metadata_file}, 包含{len(self.face_metadata)}个人脸"
+                )
             else:
                 logger.warning(f"元数据文件不存在: {load_metadata_file}")
                 return False
@@ -444,6 +468,322 @@ class UUIDFaissStore(FaissStore):
         except Exception as e:
             logger.error(f"重建索引失败: {e}")
             raise
+
+    def add_face_embedding(
+        self, embedding: np.ndarray, face_metadata: FaceMetadata, content_uuid: str
+    ) -> int:
+        """
+        添加人脸embedding到索引
+
+        Args:
+            embedding: 人脸embedding向量
+            face_metadata: 人脸元数据
+            content_uuid: 内容UUID
+
+        Returns:
+            向量ID
+        """
+        try:
+            # 使用现有的UUID向量添加方法
+            vector_id = self.add_vector_with_uuid(
+                vector=embedding,
+                content_uuid=content_uuid,
+                content_type="face",
+                metadata={
+                    "face_id": face_metadata.face_id,
+                    "image_id": face_metadata.image_id,
+                    "face_rect": face_metadata.face_rect,
+                    "confidence": face_metadata.confidence,
+                },
+            )
+
+            # 更新人脸元数据中的embedding
+            face_metadata.update_embedding(embedding)
+
+            # 保存人脸特定的元数据
+            self.face_metadata[vector_id] = face_metadata
+
+            logger.debug(
+                f"添加人脸embedding成功: face_id={face_metadata.face_id}, vector_id={vector_id}"
+            )
+
+            return vector_id
+
+        except Exception as e:
+            logger.error(f"添加人脸embedding失败: {e}")
+            raise
+
+    def search_similar_faces(
+        self,
+        query_embedding: np.ndarray,
+        k: int = 10,
+        similarity_method: str = FaceSimilarityMethod.COSINE,
+    ) -> List[FaceSearchResult]:
+        """
+        搜索相似人脸
+
+        Args:
+            query_embedding: 查询人脸的embedding
+            k: 返回结果数量
+            similarity_method: 相似度计算方法
+
+        Returns:
+            人脸搜索结果列表
+        """
+        try:
+            import time
+
+            start_time = time.time()
+
+            # 使用content_type过滤搜索人脸向量
+            results = self.search_with_uuid(
+                query_embedding, k, content_type_filter="face"
+            )
+
+            # 转换为人脸搜索结果
+            face_results = []
+            for rank, result in enumerate(results):
+                vector_id = result["vector_id"]
+                distance = result["distance"]
+
+                if vector_id in self.face_metadata:
+                    face_metadata = self.face_metadata[vector_id]
+
+                    # 计算相似度分数
+                    similarity_score = self._distance_to_similarity(
+                        distance, similarity_method
+                    )
+
+                    face_result = FaceSearchResult(
+                        face_metadata=face_metadata,
+                        similarity_score=similarity_score,
+                        rank=rank + 1,
+                        distance=distance,
+                        search_type=f"face_{similarity_method}",
+                    )
+                    face_results.append(face_result)
+                else:
+                    logger.warning(f"找不到人脸元数据: vector_id={vector_id}")
+
+            search_time = time.time() - start_time
+            logger.info(f"人脸相似度搜索完成: 查询耗时{search_time:.3f}s, 返回{len(face_results)}个结果")
+
+            return face_results
+
+        except Exception as e:
+            logger.error(f"人脸相似度搜索失败: {e}")
+            raise
+
+    def _distance_to_similarity(
+        self, distance: float, method: str = FaceSimilarityMethod.COSINE
+    ) -> float:
+        """
+        将距离转换为相似度分数 [0,1]
+
+        Args:
+            distance: 向量距离
+            method: 相似度计算方法
+
+        Returns:
+            相似度分数
+        """
+        if method == FaceSimilarityMethod.COSINE:
+            return max(0.0, min(1.0, 1.0 - distance / 2.0))
+        elif method == FaceSimilarityMethod.EUCLIDEAN:
+            return np.exp(-distance / 2.0)
+        elif method == FaceSimilarityMethod.DOT_PRODUCT:
+            return max(0.0, min(1.0, distance))
+        else:
+            return max(0.0, min(1.0, 1.0 / (1.0 + distance)))
+
+    def compare_faces(
+        self,
+        face_id1: str,
+        face_id2: str,
+        similarity_method: str = FaceSimilarityMethod.COSINE,
+    ) -> Optional[float]:
+        """
+        比较两个人脸的相似度
+
+        Args:
+            face_id1: 第一个人脸ID
+            face_id2: 第二个人脸ID
+            similarity_method: 相似度计算方法
+
+        Returns:
+            相似度分数，如果找不到人脸则返回None
+        """
+        try:
+            face_metadata1 = self.get_face_metadata_by_id(face_id1)
+            face_metadata2 = self.get_face_metadata_by_id(face_id2)
+
+            if not face_metadata1 or not face_metadata2:
+                logger.warning(f"找不到人脸数据: face_id1={face_id1}, face_id2={face_id2}")
+                return None
+
+            if (
+                face_metadata1.embedding_vector is None
+                or face_metadata2.embedding_vector is None
+            ):
+                logger.warning("人脸embedding向量为空")
+                return None
+
+            # 计算相似度
+            similarity = self._calculate_similarity(
+                face_metadata1.embedding_vector,
+                face_metadata2.embedding_vector,
+                similarity_method,
+            )
+
+            return similarity
+
+        except Exception as e:
+            logger.error(f"人脸比较失败: {e}")
+            return None
+
+    def _calculate_similarity(
+        self,
+        embedding1: np.ndarray,
+        embedding2: np.ndarray,
+        method: str = FaceSimilarityMethod.COSINE,
+    ) -> float:
+        """
+        计算两个embedding向量的相似度
+
+        Args:
+            embedding1: 第一个向量
+            embedding2: 第二个向量
+            method: 相似度计算方法
+
+        Returns:
+            相似度分数
+        """
+        if method == FaceSimilarityMethod.COSINE:
+            dot_product = np.dot(embedding1, embedding2)
+            norm1 = np.linalg.norm(embedding1)
+            norm2 = np.linalg.norm(embedding2)
+            return dot_product / (norm1 * norm2)
+        elif method == FaceSimilarityMethod.EUCLIDEAN:
+            distance = np.linalg.norm(embedding1 - embedding2)
+            return np.exp(-distance / 2.0)
+        elif method == FaceSimilarityMethod.DOT_PRODUCT:
+            return np.dot(embedding1, embedding2)
+        elif method == FaceSimilarityMethod.MANHATTAN:
+            distance = np.sum(np.abs(embedding1 - embedding2))
+            return 1.0 / (1.0 + distance)
+        else:
+            raise ValueError(f"不支持的相似度计算方法: {method}")
+
+    def get_face_metadata_by_id(self, face_id: str) -> Optional[FaceMetadata]:
+        """
+        通过face_id获取人脸元数据
+
+        Args:
+            face_id: 人脸ID
+
+        Returns:
+            人脸元数据，如果不存在返回None
+        """
+        for face_metadata in self.face_metadata.values():
+            if face_metadata.face_id == face_id:
+                return face_metadata
+        return None
+
+    def get_faces_by_image_id(self, image_id: str) -> List[FaceMetadata]:
+        """
+        获取指定图片的所有人脸
+
+        Args:
+            image_id: 图片ID
+
+        Returns:
+            人脸元数据列表
+        """
+        faces = []
+        for face_metadata in self.face_metadata.values():
+            if face_metadata.image_id == image_id:
+                faces.append(face_metadata)
+        return faces
+
+    def remove_face(self, face_id: str) -> bool:
+        """
+        移除指定的人脸数据
+
+        Args:
+            face_id: 人脸ID
+
+        Returns:
+            是否移除成功
+        """
+        try:
+            # 找到对应的向量ID
+            vector_id_to_remove = None
+            for vector_id, face_metadata in self.face_metadata.items():
+                if face_metadata.face_id == face_id:
+                    vector_id_to_remove = vector_id
+                    break
+
+            if vector_id_to_remove is None:
+                logger.warning(f"找不到要删除的人脸: {face_id}")
+                return False
+
+            # 从人脸元数据中移除
+            del self.face_metadata[vector_id_to_remove]
+
+            # 从向量元数据中移除（通过UUID删除）
+            if vector_id_to_remove in self.vector_metadata:
+                content_uuid = self.vector_metadata[vector_id_to_remove].get(
+                    "content_uuid"
+                )
+                if content_uuid:
+                    self.delete_vectors_by_uuid(content_uuid)
+
+            logger.info(f"人脸数据已移除: {face_id}")
+            return True
+
+        except Exception as e:
+            logger.error(f"移除人脸数据失败: {e}")
+            return False
+
+    def get_face_statistics(self) -> Dict[str, Any]:
+        """
+        获取人脸存储统计信息
+
+        Returns:
+            人脸统计信息字典
+        """
+        try:
+            total_faces = len(self.face_metadata)
+            unique_images = len(set(fm.image_id for fm in self.face_metadata.values()))
+
+            # 计算平均每张图片的人脸数
+            avg_faces_per_image = (
+                total_faces / unique_images if unique_images > 0 else 0
+            )
+
+            # 统计embedding维度分布
+            dimensions = [
+                fm.embedding_dimension
+                for fm in self.face_metadata.values()
+                if fm.embedding_vector is not None
+            ]
+
+            face_stats = {
+                "total_faces": total_faces,
+                "unique_images": unique_images,
+                "average_faces_per_image": round(avg_faces_per_image, 2),
+                "embedding_dimensions": {
+                    "min": min(dimensions) if dimensions else 0,
+                    "max": max(dimensions) if dimensions else 0,
+                    "avg": sum(dimensions) / len(dimensions) if dimensions else 0,
+                },
+            }
+
+            return face_stats
+
+        except Exception as e:
+            logger.error(f"获取人脸统计信息失败: {e}")
+            return {}
 
     def search(self, query_vector: np.ndarray, k: int = 5) -> List[Dict[str, Any]]:
         """

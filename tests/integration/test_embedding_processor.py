@@ -14,7 +14,7 @@ from clients.qwen_client import QwenClient
 from config import QwenVLConfig
 from processors.embedding_processor import EmbeddingProcessor
 from tests.test_data import get_test_image_base64
-from vector_store.faiss_store import FaissStore
+from vector_store import FaissStore
 
 pytestmark = pytest.mark.skipif(
     os.getenv("USE_REAL_API", "false").lower() != "true",

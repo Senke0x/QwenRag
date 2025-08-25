@@ -4,7 +4,8 @@
 
 from .uuid_faiss_store import UUIDFaissStore
 
-# 向后兼容：将UUIDFaissStore作为默认的FaissStore
+# 向后兼容：将UUIDFaissStore作为默认的FaissStore和FaceFaissStore
 FaissStore = UUIDFaissStore
+FaceFaissStore = UUIDFaissStore
 
-__all__ = ["UUIDFaissStore", "FaissStore"]
+__all__ = ["UUIDFaissStore", "FaissStore", "FaceFaissStore"]

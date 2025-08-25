@@ -26,7 +26,7 @@ from processors.image_processor import ImageProcessor
 from schemas.data_models import ProcessingStatus
 from utils.image_utils import find_images_in_directory
 from utils.logger import setup_logger
-from vector_store.faiss_store import FaissStore
+from vector_store import FaissStore
 
 
 def setup_logging(log_level: str = "INFO", log_file: str = None):
